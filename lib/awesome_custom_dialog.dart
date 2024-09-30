@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'awesome_custom_dialog_widget.dart';
 
-
-
 class ACDDialog {
-
   ///
   /// Dialog properties
   ///
@@ -50,12 +47,11 @@ class ACDDialog {
   // checking for current dialog visibility
   get isShowing => _isShowing;
   bool _isShowing = false;
-  ///
-  ///
-  ///
-  ///
 
-
+  ///
+  ///
+  ///
+  ///
 
   static void init(BuildContext ctx) {
     _context = ctx;
@@ -77,16 +73,16 @@ class ACDDialog {
 
   ACDDialog text(
       {padding,
-        text,
-        color,
-        fontSize,
-        alignment,
-        textAlign,
-        maxLines,
-        textDirection,
-        overflow,
-        fontWeight,
-        fontFamily}) {
+      text,
+      color,
+      fontSize,
+      alignment,
+      textAlign,
+      maxLines,
+      textDirection,
+      overflow,
+      fontWeight,
+      fontFamily}) {
     return widget(
       Padding(
         padding: padding ?? const EdgeInsets.all(0.0),
@@ -212,7 +208,8 @@ class ACDDialog {
                       dismiss();
                     }
                   },
-                  contentPadding: items?[index].padding ?? const EdgeInsets.all(0.0),
+                  contentPadding:
+                      items?[index].padding ?? const EdgeInsets.all(0.0),
                   leading: items?[index].leading,
                   title: Text(
                     items?[index].text ?? "",
@@ -260,8 +257,7 @@ class ACDDialog {
     );
   }
 
-  ACDDialog acdProgress(
-      {padding, backgroundColor, valueColor, strokeWidth}) {
+  ACDDialog acdProgress({padding, backgroundColor, valueColor, strokeWidth}) {
     return widget(Padding(
       padding: padding,
       child: CircularProgressIndicator(
@@ -423,7 +419,8 @@ class ACDChildren extends StatefulWidget {
   final List<Widget> widgetList;
   final Function(bool)? isShowingChange;
 
-  const ACDChildren({super.key, this.widgetList = const [], this.isShowingChange});
+  const ACDChildren(
+      {super.key, this.widgetList = const [], this.isShowingChange});
 
   @override
   CustomDialogChildState createState() => CustomDialogChildState();
@@ -448,7 +445,6 @@ class CustomDialogChildState extends State<ACDChildren> {
     super.dispose();
   }
 }
-
 
 class ACD {
   final BuildContext _context;
@@ -583,6 +579,7 @@ enum ACDGravity {
   leftBottom,
   spaceEvenly,
 }
+
 ///
 ///
 ///

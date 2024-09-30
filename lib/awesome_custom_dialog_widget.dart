@@ -10,7 +10,7 @@ class ACDRadioListTile extends StatefulWidget {
     this.color,
     this.activeColor,
     this.onChanged,
-  })  : assert(items != null);
+  }) : assert(items != null);
 
   final List<ACDRadioItem>? items;
   final Color? color;
@@ -50,7 +50,7 @@ class ACDRadioListTileState extends State<ACDRadioListTile> {
               style: TextStyle(
                   fontSize: widget.items?[index].fontSize ?? 14,
                   fontWeight:
-                  widget.items?[index].fontWeight ?? FontWeight.normal,
+                      widget.items?[index].fontWeight ?? FontWeight.normal,
                   color: widget.items?[index].color ?? Colors.black),
             ),
             value: index,
