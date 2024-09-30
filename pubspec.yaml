@@ -1,7 +1,7 @@
 name: awesome_custom_dialog
 description: "A new Flutter project."
 version: 0.0.1
-homepage:
+homepage: https://github.com/devamitkumartiwari/awesome_custom_dialog
 
 environment:
   sdk: '>=3.3.4 <4.0.0'
