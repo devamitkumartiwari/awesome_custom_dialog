@@ -1,3 +1,3 @@
 ## 0.0.1
 
-* TODO: Describe initial release.
+# ✨ awesome_custom_dialog initial release
