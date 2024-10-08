@@ -548,7 +548,7 @@ class ACD {
 
     /// Custom animation
     if (_animatedFunc != null) {
-      return _animatedFunc(child, animation);
+      return _animatedFunc!(child, animation);
     }
 
     /// No default animation required
