@@ -5,7 +5,7 @@ ACDDialog acdNoticeDialog() {
   return ACDDialog().build()
     ..width = 120
     ..height = 110
-    ..backgroundColor = Colors.black.withOpacity(0.8)
+    ..backgroundColor = const Color.fromRGBO(0, 0, 0, 0.8)
     ..borderRadius = 10.0
     ..widget(Padding(
       padding: const EdgeInsets.only(top: 21),
