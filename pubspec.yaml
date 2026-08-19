@@ -1,12 +1,14 @@
 name: awesome_custom_dialog
 description: "Awesome flutter dialog makes easy to add custom dialogs inside application"
-version: 0.0.3
+version: 1.0.0
+homepage: https://github.com/devamitkumartiwari/awesome_custom_dialog
 repository: https://github.com/devamitkumartiwari/awesome_custom_dialog
-homepage: https://amitkumartiwarimobiledeveloper.web.app/
+issue_tracker: https://github.com/devamitkumartiwari/awesome_custom_dialog/issues
+
 
 environment:
-  sdk: '>=3.1.0 <4.0.0'
-  flutter: '>=3.32.0'
+  sdk: '>=3.13.0 <4.0.0'
+  flutter: '>=3.29.0'
 
 dependencies:
   flutter:
@@ -15,7 +17,8 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
+
 

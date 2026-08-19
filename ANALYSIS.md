@@ -526,6 +526,18 @@ ACDDialog().build()
 
 ---
 
+### FEAT-15 — Full-featured toast messages (implemented in 1.0.0)
+
+`ACDDialog.toast()` gained `ACDToastLength` (short/long), `cancelPrevious`/`ACDDialog.cancelToast()`, `showCloseButton`, `dismissOnTap`, `fontFamily`, and now presents through a non-blocking overlay by default (`blockTouches` restores the old modal presentation). See CHANGELOG 1.0.0 for the full parameter list.
+
+---
+
+### FEAT-16 — Full-featured snackbar messages (implemented in 1.0.0)
+
+New `ACDContentType` enum (success/failure/warning/help) with real accent colors, a standalone `ACDSnackbarContent` widget for use in a real `SnackBar`/`ScaffoldMessenger`/`MaterialBanner`, and a convenience `ACDDialog.snackbar()` factory presenting it through the same overlay pipeline `.toast()` uses. See CHANGELOG 1.0.0.
+
+---
+
 ## README & Documentation Gaps
 
 The current README is essentially empty (only shows the install snippet). It needs:
@@ -598,3 +610,10 @@ Currently there are **zero tests**. Minimum recommended coverage:
 - FEAT-12 `onBarrierTap` callback
 - FEAT-13 Dialog queue
 - FEAT-14 RTL support
+
+### v1.0.0 — Toast + Snackbar (shipped)
+- FEAT-15 Full-featured toast messages (length presets, cancel, close button, dismiss-on-tap, custom font, non-blocking overlay presentation)
+- FEAT-16 Full-featured snackbar messages (`ACDContentType`, `ACDSnackbarContent`, `ACDDialog.snackbar()`)
+- Full style customization pass (colors/fonts/padding/corners/icons) across presets, buttons, lists, text fields, toast, and snackbar
+- Code reorganized from one file into small per-purpose files under `lib/src/`
+- Tooling: Flutter `>=3.29.0`; example Android bumped to Gradle 9.3.1 / AGP 9.1.0 / Kotlin 2.4.0 / Java 17; iOS UIScene lifecycle (example iOS); SPM scaffold (`ios/awesome_custom_dialog/Package.swift`)
