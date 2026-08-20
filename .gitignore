@@ -27,3 +27,11 @@ migrate_working_dir/
 **/doc/api/
 .dart_tool/
 build/
+
+# This package is pure Dart with no native iOS code — /ios only holds an
+# SPM scaffold (ios/awesome_custom_dialog/). Flutter tooling can still
+# regenerate its usual build-artifact folders there if a `flutter` command
+# is accidentally run from the package root instead of example/; ignore
+# them so they never get committed/published again.
+/ios/Flutter/
+/ios/Runner/
