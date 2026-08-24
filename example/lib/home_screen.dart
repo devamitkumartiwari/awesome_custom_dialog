@@ -6,6 +6,7 @@ import 'screens/buttons_screen.dart';
 import 'screens/inputs_screen.dart';
 import 'screens/positioning_screen.dart';
 import 'screens/presets_screen.dart';
+import 'screens/searchable_list_screen.dart';
 import 'screens/snackbar_screen.dart';
 import 'screens/toast_screen.dart';
 
@@ -46,6 +47,13 @@ final List<_Category> _categories = [
     icon: Icons.edit_note,
     color: Colors.purple,
     builder: (_) => const InputsScreen(),
+  ),
+  _Category(
+    title: 'Searchable List',
+    subtitle: 'Filterable single/multi-select, local or async',
+    icon: Icons.search,
+    color: Colors.orange,
+    builder: (_) => const SearchableListScreen(),
   ),
   _Category(
     title: 'Animations',

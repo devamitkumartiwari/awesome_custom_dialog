@@ -14,6 +14,7 @@ A simple, flexible way to show dialogs, toasts, and snackbars in Flutter — all
 - **Ready-made dialogs**: Success, Error, Warning, and Info — just fill in a title and message.
 - **Smooth animations**: Fade, scale, bounce, rotate, and slide.
 - **Everything you need inside**: text, buttons (one/two/three), radio lists, checkboxes, progress spinners, images, and text fields (with optional validation).
+- **Searchable lists**: A filterable, generic `<T>` list for the dialog — single- or multi-select, local filtering or async `onFind` remote search with loading/empty/error states.
 - **Toast messages**: A tiny, auto-dismissing message that never blocks the rest of your screen — with length, close button, and cancel support.
 - **Snackbar messages**: Colorful success/failure/warning/help banners, usable on their own or through the dialog API.
 - **Style everything**: Colors, fonts, padding, corner radius, and icons are all customizable, everywhere — with sensible defaults if you change nothing.
@@ -104,6 +105,19 @@ dialog
   )
   ..show();
 ```
+
+### 6. Searchable List
+```dart
+ACDDialog().build(context)
+  ..height = 400
+  ..searchableList<String>(
+    items: countries,
+    searchHint: "Search countries",
+    onChange: (country) => print("Picked $country"),
+  )
+  ..show();
+```
+Pass your own model type instead of `String` for typed selections (`itemAsString` extracts the label, `itemBuilder` fully customizes each row), or use `.multiSearchableList<T>()` for a multi-select version with a built-in Confirm/Cancel row. Supply `onFind` on either to delegate non-empty queries to your own async/remote search instead of filtering `items` locally.
 
 ---
 
@@ -210,6 +224,7 @@ Every part of every dialog, toast, and snackbar can be styled — and everything
 | `.acdImage()` | Asset or network image. |
 | `.acdDivider()` | A horizontal divider line. |
 | `.listOfACDListTile()` / `.listOfACDRadioButton()` / `.listOfACDCheckbox()` | Scrollable list content. |
+| `.searchableList<T>()` / `.multiSearchableList<T>()` | Filterable single/multi-select list, generic over your item type, with optional async `onFind` search. |
 | `.autoDismissAfter` | Close automatically after a duration. |
 | `.gravity` | Where the dialog appears (`ACDGravity`: left, top, bottom, right, center, corners...). |
 | `.animation` | How it appears (`ACDAnimation`: fade, scale, bounce, rotate, slide...). |
