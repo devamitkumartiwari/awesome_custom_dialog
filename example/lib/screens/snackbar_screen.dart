@@ -12,6 +12,7 @@ class SnackbarScreen extends StatelessWidget {
 
     return CategoryScaffold(
       title: 'Snackbar',
+      color: Colors.blueGrey,
       children: [
         buildGrid([
           actionCard(
@@ -48,6 +49,15 @@ class SnackbarScreen extends StatelessWidget {
             () => _showStandaloneSnackbar(context),
           ),
         ]),
+        const CodeSnippet(
+          code: '''
+ACDDialog.snackbar(
+  context: context,
+  title: 'Success',
+  message: 'Your changes have been saved.',
+  contentType: ACDContentType.success,
+)..show();''',
+        ),
       ],
     );
   }

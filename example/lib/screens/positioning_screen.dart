@@ -12,6 +12,7 @@ class PositioningScreen extends StatelessWidget {
 
     return CategoryScaffold(
       title: 'Positioning & Misc',
+      color: Colors.deepOrange,
       children: [
         buildList([
           listItem(
@@ -45,6 +46,18 @@ class PositioningScreen extends StatelessWidget {
             () => _showQueue(context),
           ),
         ]),
+        const CodeSnippet(
+          code: '''
+ACDDialog().build(context)
+  ..gravity = ACDGravity.left
+  ..width = 280
+  ..cornerRadius = const BorderRadius.only(
+    topRight: Radius.circular(20),
+    bottomRight: Radius.circular(20),
+  )
+  ..text(text: 'Side panel, only right corners rounded')
+  ..show();''',
+        ),
       ],
     );
   }

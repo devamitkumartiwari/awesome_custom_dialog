@@ -19,6 +19,7 @@ extension ACDDialogLists on ACDDialog {
     Function(int)? onClickItemListener,
     ScrollPhysics? physics,
     ScrollController? controller,
+    BorderRadius? borderRadius,
   }) {
     return widget(
       Padding(
@@ -47,6 +48,9 @@ extension ACDDialogLists on ACDDialog {
                       const EdgeInsets.symmetric(horizontal: 16.0),
                   leading: items?[index].leading,
                   trailing: items?[index].trailing,
+                  shape: borderRadius == null
+                      ? null
+                      : RoundedRectangleBorder(borderRadius: borderRadius),
                   title: Text(
                     items?[index].text ?? '',
                     style: TextStyle(
@@ -77,6 +81,7 @@ extension ACDDialogLists on ACDDialog {
     Function(int)? onClickItemListener,
     ScrollPhysics? physics,
     ScrollController? controller,
+    BorderRadius? borderRadius,
   }) {
     if (context == null) return this;
     final size = MediaQuery.of(context!).size;
@@ -97,6 +102,7 @@ extension ACDDialogLists on ACDDialog {
           physics: physics,
           controller: controller,
           onChanged: onClickItemListener,
+          borderRadius: borderRadius,
         ),
       ),
     );
@@ -114,6 +120,7 @@ extension ACDDialogLists on ACDDialog {
     Function(List<int>)? onChanged,
     ScrollPhysics? physics,
     ScrollController? controller,
+    BorderRadius? borderRadius,
   }) {
     if (context == null) return this;
     final size = MediaQuery.of(context!).size;
@@ -134,6 +141,7 @@ extension ACDDialogLists on ACDDialog {
           physics: physics,
           controller: controller,
           onChanged: onChanged,
+          borderRadius: borderRadius,
         ),
       ),
     );

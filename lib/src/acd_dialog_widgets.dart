@@ -104,6 +104,8 @@ extension ACDDialogWidgets on ACDDialog {
     FormFieldValidator<String>? validator,
     AutovalidateMode? autovalidateMode,
     GlobalKey<FormFieldState<String>>? fieldKey,
+    Widget? prefixIcon,
+    Widget? suffixIcon,
   }) {
     return widget(
       Padding(
@@ -129,6 +131,8 @@ extension ACDDialogWidgets on ACDDialog {
             labelStyle: labelStyle,
             fillColor: fillColor,
             filled: fillColor != null,
+            prefixIcon: prefixIcon,
+            suffixIcon: suffixIcon,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(borderRadius),
               borderSide: BorderSide(color: borderColor ?? Colors.grey),

@@ -5,6 +5,8 @@ class ACDRadioItem {
   /// Creates an [ACDRadioItem].
   const ACDRadioItem({
     this.padding,
+    this.leading,
+    this.trailing,
     this.text,
     this.color,
     this.fontSize,
@@ -17,6 +19,17 @@ class ACDRadioItem {
   /// Content padding for this option. Defaults to a sensible horizontal
   /// inset if unset.
   final EdgeInsets? padding;
+
+  /// Widget shown opposite the radio control (before it, since the control
+  /// itself defaults to the trailing side). Ignored if [trailing] is also
+  /// set — `RadioListTile` only has one such slot, matching Flutter's own
+  /// constraint; set at most one of the two.
+  final Widget? leading;
+
+  /// Widget shown opposite the radio control, with the control moved to the
+  /// leading side to make room. Takes priority over [leading] if both are
+  /// set — see [leading]'s note.
+  final Widget? trailing;
 
   /// The option's label.
   final String? text;
@@ -56,6 +69,7 @@ class ACDRadioListTile extends StatefulWidget {
     this.physics,
     this.controller,
     this.onChanged,
+    this.borderRadius,
   });
 
   /// The selectable options.
@@ -66,6 +80,9 @@ class ACDRadioListTile extends StatefulWidget {
 
   /// Background color of each row.
   final Color? color;
+
+  /// Corner rounding for each row.
+  final BorderRadius? borderRadius;
 
   /// Color of the selected radio button.
   final Color? activeColor;
@@ -128,14 +145,20 @@ class _ACDRadioListTileState extends State<ACDRadioListTile> {
               ),
               value: index,
               activeColor: widget.activeColor,
-              // BUG: ACDRadioItem.padding was defined but never applied,
-              // unlike ACDCheckboxItem.padding in acd_checkbox_list_tile.dart
-              // — inconsistent API.
               // BUG: defaulting to EdgeInsets.zero left icons/text flush
               // against the dialog edge with no breathing room — match
               // Flutter's own ListTile default instead.
               contentPadding:
                   item.padding ?? const EdgeInsets.symmetric(horizontal: 16.0),
+              // RadioListTile has one extra slot (`secondary`), not
+              // independent leading/trailing — see ACDRadioItem's dartdoc.
+              secondary: item.trailing ?? item.leading,
+              controlAffinity: item.trailing != null
+                  ? ListTileControlAffinity.leading
+                  : ListTileControlAffinity.platform,
+              shape: widget.borderRadius == null
+                  ? null
+                  : RoundedRectangleBorder(borderRadius: widget.borderRadius!),
             ),
           );
         },

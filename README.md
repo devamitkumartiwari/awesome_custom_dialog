@@ -1,9 +1,35 @@
 # awesome_custom_dialog
 
-A simple, flexible way to show dialogs, toasts, and snackbars in Flutter — all with one easy-to-chain API. No extra packages needed.
+A simple, flexible way to show dialogs, toasts, snackbars, autocomplete fields, slide-to-confirm actions, dashed/dotted decorations, and steppers in Flutter — all with one easy-to-chain API. No extra packages needed.
 
 [![pub package](https://img.shields.io/pub/v/awesome_custom_dialog.svg)](https://pub.dev/packages/awesome_custom_dialog)
 [![license](https://img.shields.io/github/license/devamitkumartiwari/awesome_custom_dialog.svg)](https://github.com/devamitkumartiwari/awesome_custom_dialog/blob/master/LICENSE)
+
+---
+
+## Contents
+
+- [🚀 Key Features](#-key-features)
+- [🎖 Installation](#-installation)
+- [📖 Usage Examples](#-usage-examples)
+  1. [Simple Success Preset](#1-simple-success-preset)
+  2. [Custom Dialog with List](#2-custom-dialog-with-list)
+  3. [Toast Message](#3-toast-message)
+  4. [Custom Animation and Position](#4-custom-animation-and-position)
+  5. [Text Field with Validation](#5-text-field-with-validation)
+  6. [Searchable List](#6-searchable-list)
+  7. [Dropdown Field](#7-dropdown-field)
+  8. [Autocomplete](#8-autocomplete)
+  9. [Slide to Confirm](#9-slide-to-confirm)
+  10. [Dashed and Dotted Decoration](#10-dashed-and-dotted-decoration)
+  11. [Stepper](#11-stepper)
+- [🍞 Toast](#-toast)
+- [🍫 Snackbar](#-snackbar)
+- [🎨 Customizing Everything](#-customizing-everything)
+- [🛠 API Overview](#-api-overview)
+- [⚙️ A Few More Things](#️-a-few-more-things)
+- [🤝 Contributing](#-contributing)
+- [📜 License](#-license)
 
 ---
 
@@ -16,9 +42,13 @@ A simple, flexible way to show dialogs, toasts, and snackbars in Flutter — all
 - **Everything you need inside**: text, buttons (one/two/three), radio lists, checkboxes, progress spinners, images, and text fields (with optional validation).
 - **Searchable lists**: A filterable, generic `<T>` list for the dialog — single- or multi-select, local filtering or async `onFind` remote search with loading/empty/error states.
 - **Dropdown fields**: `ACDDropdownField<T>` / `ACDMultiDropdownField<T>` — an inline, `Form`-compatible searchable dropdown (validator, clear button, disabled items, pinned favorites, paginated search) that opens as a dialog, bottom sheet, or anchored menu.
+- **Autocomplete**: `ACDAutocompleteField<T>` — a generic typeahead field with local or remote search — and `ACDTriggerAutocompleteField` for multi-trigger `@mention`/`#hashtag`-style autocomplete.
+- **Slide to confirm**: `ACDSlideAction` — a drag-to-confirm action bar with RTL support, haptics, and loading/success feedback via `ACDSlideActionController`, plus a ready-made `.swipeButton` preset that needs no styling at all.
+- **Dashed & dotted decoration**: `ACDDashedLine`, `ACDDottedDecoration` (a drop-in `Decoration`), and `ACDDashedBorder` (wraps any widget, including custom-path outlines).
+- **Stepper**: `ACDStepper` — a horizontal wizard or vertical timeline progress indicator — and `ACDStepperListView<T>` for a scrollable timeline list.
 - **Toast messages**: A tiny, auto-dismissing message that never blocks the rest of your screen — with length, close button, and cancel support.
 - **Snackbar messages**: Colorful success/failure/warning/help banners, usable on their own or through the dialog API.
-- **Style everything**: Colors, fonts, padding, corner radius, and icons are all customizable, everywhere — with sensible defaults if you change nothing.
+- **Style everything**: Colors, gradients, fonts, padding, corner radius, elevation/shadow, and icons are all customizable, everywhere — with sensible defaults if you change nothing.
 - **No extra dependencies**: Just Flutter itself.
 
 ---
@@ -215,6 +245,117 @@ ACDDropdownField<String>(
 )
 ```
 
+### 8. Autocomplete
+
+`ACDAutocompleteField<T>` is a standalone typeahead text field — generic over your item type, with local or remote suggestion matching:
+```dart
+ACDAutocompleteField<String>(
+  suggestions: countries,
+  decoration: const InputDecoration(labelText: "Country"),
+  onSuggestionSelected: (country) => print("Picked $country"),
+)
+```
+Supply `filterFn` for custom local matching, or `onFind` to delegate to a remote/async source (debounced by `searchDebounce`) — same shape as `ACDDropdownField.onFind`. `submitOnSuggestionTap`/`clearOnSubmit` control what happens after a pick, and `itemBuilder` fully customizes each suggestion row.
+
+For `@mention`/`#hashtag`-style autocomplete with multiple independent triggers in one field, use `ACDTriggerAutocompleteField` with a list of `ACDAutocompleteTrigger`s:
+```dart
+ACDTriggerAutocompleteField(
+  decoration: const InputDecoration(labelText: "Message"),
+  maxLines: 3,
+  triggers: [
+    ACDAutocompleteTrigger(trigger: "@", optionsBuilder: findUsers),
+    ACDAutocompleteTrigger(trigger: "#", optionsBuilder: findHashtags),
+  ],
+  onOptionSelected: (trigger, option) => print("$option via ${trigger.trigger}"),
+)
+```
+Each trigger's `optionsBuilder(query)` is its own async lookup, so `@` and `#` can search entirely different data sources. `triggerOnlyAtStart`/`triggerOnlyAfterSpace` control when a trigger arms, and `minCharsForSuggestions` sets how many characters must follow it first.
+
+### 9. Slide to Confirm
+
+`ACDSlideAction` requires a deliberate drag gesture before firing an action — useful anywhere an accidental tap shouldn't be enough (payments, deletions, unlocking):
+```dart
+ACDSlideAction(
+  label: "Slide to confirm",
+  onConfirm: () => print("Confirmed!"),
+)
+```
+
+Pair it with `ACDSlideActionController` to show loading/success feedback for an async action:
+```dart
+final controller = ACDSlideActionController();
+
+ACDSlideAction(
+  controller: controller,
+  label: "Slide to pay",
+  onConfirm: () async {
+    controller.loading();
+    final ok = await submitPayment();
+    ok ? controller.success() : controller.reset();
+  },
+)
+```
+
+Want a polished look with zero styling? `ACDSlideAction.swipeButton()` is a ready-made preset:
+```dart
+ACDSlideAction.swipeButton(
+  label: "Swipe to pay",
+  onConfirm: () => print("Paid"),
+)
+```
+Both constructors share the same full customization surface — shape (`ACDSlideActionShape.rectangle`/`.circle`), drag direction (`ACDSlideActionDirection.startToEnd`/`.endToStart`/`.dual`), colors and gradients (including separate active/inactive variants for both thumb and track), elevation, a wave-trail animation, and full builder escape hatches (`foregroundBuilder`/`backgroundBuilder`/`outerBackgroundBuilder`) — see [Customizing Everything](#-customizing-everything) below.
+
+### 10. Dashed and Dotted Decoration
+
+`ACDDashedLine` draws a standalone dashed/dotted line, horizontal or vertical:
+```dart
+ACDDashedLine(length: 200, color: Colors.grey, dashLength: 6, gapLength: 4)
+ACDDashedLine(axis: Axis.vertical, length: 100, roundedCaps: true)
+```
+
+`ACDDottedDecoration` is a drop-in `Decoration` — use it anywhere a `BoxDecoration` would go:
+```dart
+Container(
+  decoration: const ACDDottedDecoration(shape: ACDDottedShape.box),
+  child: const Padding(padding: EdgeInsets.all(12), child: Text("Hi")),
+)
+```
+`shape` also supports `.line` (a single dashed edge, positioned via `linePosition`) and `.oval`.
+
+`ACDDashedBorder` wraps any widget with a dashed outline:
+```dart
+ACDDashedBorder(
+  shape: ACDDashedBorderShape.roundedRect,
+  child: const Padding(padding: EdgeInsets.all(16), child: Text("Drop file here")),
+)
+```
+`shape` also supports `.rect`, `.oval`, `.circle`, and `.customPath` (pass `customPathBuilder: (size) => Path()...` for an arbitrary outline).
+
+### 11. Stepper
+
+`ACDStepper` is a compact step-progress indicator — a horizontal wizard bar by default:
+```dart
+ACDStepper(
+  steps: const ["Cart", "Address", "Payment", "Done"],
+  activeStep: currentStep,
+  onStepReached: (i) => setState(() => currentStep = i),
+)
+```
+Set `direction: Axis.vertical` for a timeline layout instead. For a "minimal dots" look, combine `stepShape: ACDStepShape.circle`, a small `stepRadius`, and `showTitle: false`.
+
+For a scrollable list of steps (e.g. order-tracking history) rather than a small fixed count, use `ACDStepperListView<T>`:
+```dart
+ACDStepperListView<String>(
+  items: const [
+    ACDStepperItemData(id: 1, data: "Order placed"),
+    ACDStepperItemData(id: 2, data: "Shipped"),
+    ACDStepperItemData(id: 3, data: "Delivered"),
+  ],
+  contentBuilder: (context, item, index) => Text(item.data),
+)
+```
+`avatarBuilder`/`labelBuilder` customize each row's marker/label, and `theme: ACDStepperThemeData(dashed: true)` switches the connector line from solid to dashed.
+
 ---
 
 ## 🍞 Toast
@@ -287,12 +428,32 @@ ACDDialog.snackbar(
 
 ## 🎨 Customizing Everything
 
-Every part of every dialog, toast, snackbar, and dropdown field can be styled — and everything has a sensible default if you don't touch it:
+Every part of every dialog, toast, snackbar, dropdown field, autocomplete field, slide action, decoration, and stepper can be styled — and everything has a sensible default if you don't touch it:
 
 - **Color**: `color`, `backgroundColor`, `iconColor`, `titleColor`, `messageColor`, and more, depending on what you're building.
 - **Font**: `fontFamily`, `fontSize`, `fontWeight` as quick shortcuts, or pass a full `TextStyle` (`style`, `titleStyle`, `messageStyle`, `textStyle1`/`2`/`3`...) for complete control — letter spacing, italics, underlines, anything `TextStyle` supports.
+- **Buttons**: `oneButton`/`twoButton`/`threeButton` accept `backgroundColor`, `borderRadius`, `elevation`/`boxShadow`, `icon`, and `gradient` per button slot — not just text color/style:
+  ```dart
+  ACDDialog().build(context)
+    ..oneButton(
+      text: "Done",
+      color: Colors.white,
+      backgroundColor: Colors.teal,
+      borderRadius: BorderRadius.circular(12),
+      icon: Icons.check_circle_outline,
+    )
+    ..show();
+  ```
+- **Snackbar**: `ACDSnackbarContent`/`ACDDialog.snackbar()` accept `gradient` (overriding the flat background color), `elevation`/`boxShadow`, and `titleFontSize`/`titleFontWeight`/`titleFontFamily`/`messageFontSize`/`messageFontWeight`/`messageFontFamily` shortcuts alongside the existing full `titleTextStyle`/`messageTextStyle`.
+- **Lists**: `listOfACDListTile`/`listOfACDRadioButton`/`listOfACDCheckbox`/`searchableList` all accept a `borderRadius` for rounded rows; `ACDRadioItem`/`ACDCheckboxItem` accept `leading`/`trailing` widgets (previously only the plain list variant could); the searchable list's magnifying-glass icon is overridable via `searchIcon`.
+- **`acdTextField`**: accepts `prefixIcon`/`suffixIcon`, on top of the existing fill/border/label styling.
 - **Dropdown fields**: `ACDDropdownField`/`ACDMultiDropdownField` take a standard `InputDecoration` for the closed-state field (label, hint, border, fill, icons — same as `TextFormField`), plus their own `itemTextColor`/`itemFontSize`/`itemFontWeight`/`itemFontFamily`/`itemStyle`, `tileColor`, and `searchFillColor`/`searchBorderColor`/`searchBorderRadius` for the popup — see the styling example in [Dropdown Field](#7-dropdown-field) above.
-- **Corners**: `borderRadius` is available on dialogs, images, text fields, toasts, and snackbars. For a dialog that only wants *some* corners rounded (like a side panel sitting flush against an edge), pass a full `cornerRadius` instead:
+- **Autocomplete popups**: `ACDAutocompleteField`/`ACDTriggerAutocompleteField` accept `popupElevation`/`popupBorderRadius`/`popupColor` for the suggestion card, plus the same `itemTextColor`/`itemFontSize`/`itemFontWeight`/`itemFontFamily`/`itemStyle` row-styling shortcuts as the dropdown field.
+- **Dashed/dotted/border**: `ACDDashedLine`, `ACDDottedDecoration`, and `ACDDashedBorder` all accept a `gradient` (overriding the flat `color`) and `roundedCaps` (turns square dash segments into rounded — what actually makes a dotted pattern read as *dots*).
+- **Slide to confirm**: `ACDSlideAction` accepts `activeThumbColor`/`inactiveThumbColor` and `activeTrackColor`/`inactiveTrackColor` for distinct idle-vs-dragging looks, with matching `activeThumbGradient`/`inactiveThumbGradient`/`activeTrackGradient`/`inactiveTrackGradient` gradient variants, plus `elevationThumb`/`elevationTrack`, `trackPadding`, `thumbBorderRadius`, and a `showWaveTrail` animated trail.
+- **Stepper**: `ACDStepper` accepts per-status `finishedStepGradient`/`activeStepGradient`/`upcomingStepGradient`, `markerElevation`/`markerBoxShadow`, and an implicit `animationDuration`/`animationCurve` transition whenever `activeStep` changes; `ACDStepperListView` has the matching `avatarGradient`/`avatarElevation`/`animationDuration`/`animationCurve`.
+- **Gradients & elevation, consistently**: as a rule across the whole package, any widget with a background color also accepts a matching `Gradient?` override, and most now expose an `elevation`/`boxShadow` pair — not just the dialog core.
+- **Corners**: `borderRadius` is available on dialogs, images, text fields, toasts, snackbars, lists, buttons, and every new widget above. For a dialog that only wants *some* corners rounded (like a side panel sitting flush against an edge), pass a full `cornerRadius` instead:
   ```dart
   ACDDialog().build(context)
     ..gravity = ACDGravity.left
@@ -305,7 +466,7 @@ Every part of every dialog, toast, snackbar, and dropdown field can be styled �
     ..show();
   ```
 - **Padding & margin**: `padding` and `margin` are available almost everywhere content is added.
-- **Icons**: swap the icon on any preset (`success()`, `error()`, `warning()`, `info()`) or snackbar (`icon:`) for your own.
+- **Icons**: swap the icon on any preset (`success()`, `error()`, `warning()`, `info()`), snackbar (`icon:`), button (`icon`/`icon1`/`icon2`/`icon3`), or the searchable list's search icon (`searchIcon`) for your own.
 
 ---
 
@@ -315,14 +476,23 @@ Every part of every dialog, toast, snackbar, and dropdown field can be styled �
 |---|---|
 | `.success()` / `.error()` / `.warning()` / `.info()` | Ready-made status dialogs. |
 | `.text()` | Add styled text. |
-| `.oneButton()` / `.twoButton()` / `.threeButton()` | Add action buttons. |
-| `.acdTextField()` | Input field inside a dialog, with optional validation. |
+| `.oneButton()` / `.twoButton()` / `.threeButton()` | Add action buttons — colors, shape, elevation, icon, gradient. |
+| `.acdTextField()` | Input field inside a dialog, with optional validation and prefix/suffix icons. |
 | `.acdProgress()` | Loading spinner. |
 | `.acdImage()` | Asset or network image. |
 | `.acdDivider()` | A horizontal divider line. |
-| `.listOfACDListTile()` / `.listOfACDRadioButton()` / `.listOfACDCheckbox()` | Scrollable list content. |
+| `.listOfACDListTile()` / `.listOfACDRadioButton()` / `.listOfACDCheckbox()` | Scrollable list content, with per-row `borderRadius` and `leading`/`trailing` widgets. |
 | `.searchableList<T>()` / `.multiSearchableList<T>()` | Filterable single/multi-select list, generic over your item type, with optional async `onFind` search. |
 | `ACDDropdownField<T>` / `ACDMultiDropdownField<T>` | Inline, `Form`-compatible searchable dropdown — dialog/bottomSheet/menu popup, validator, clear button, paginated search. |
+| `ACDAutocompleteField<T>` | Standalone typeahead text field with local or remote suggestion matching. |
+| `ACDTriggerAutocompleteField` / `ACDAutocompleteTrigger` | Multi-trigger `@mention`/`#hashtag`-style autocomplete field. |
+| `ACDSlideAction` / `ACDSlideAction.swipeButton()` | Drag-to-confirm action bar, with a ready-made zero-styling preset. |
+| `ACDSlideActionController` | Drives an `ACDSlideAction`'s loading/success/reset lifecycle from an async handler. |
+| `ACDDashedLine` | Standalone dashed/dotted line, horizontal or vertical. |
+| `ACDDottedDecoration` | Dashed/dotted `Decoration` — drop into any `Container(decoration: ...)`. |
+| `ACDDashedBorder` | Wraps any widget with a dashed/dotted border, including custom-path outlines. |
+| `ACDStepper` | Horizontal wizard or vertical timeline step-progress indicator. |
+| `ACDStepperListView<T>` / `ACDStepperItemData<T>` | Scrollable timeline list — avatar/marker + connector line + content per row. |
 | `.autoDismissAfter` | Close automatically after a duration. |
 | `.gravity` | Where the dialog appears (`ACDGravity`: left, top, bottom, right, center, corners...). |
 | `.animation` | How it appears (`ACDAnimation`: fade, scale, bounce, rotate, slide...). |
@@ -334,7 +504,7 @@ Every part of every dialog, toast, snackbar, and dropdown field can be styled �
 
 ## ⚙️ A Few More Things
 
-- **Right-to-left layouts**: set `..textDirection = TextDirection.rtl` for RTL apps.
+- **Right-to-left layouts**: set `..textDirection = TextDirection.rtl` for RTL apps — `ACDSlideAction` also mirrors its own drag direction automatically under RTL.
 - **Safe area**: top/bottom dialogs automatically avoid notches and system bars; set `..respectSafeArea = true` to force it for any position.
 - **Tapping outside the dialog**: `..barrierDismissible = false` stops taps outside from closing it, and `..onBarrierTap = () {}` lets you run your own logic when the user taps outside.
 - **App theme**: `..useTheme = true` picks up your app's `ThemeData.dialogTheme` background instead of a fixed color.

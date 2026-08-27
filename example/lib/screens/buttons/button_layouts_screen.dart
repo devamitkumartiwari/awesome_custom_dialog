@@ -1,17 +1,18 @@
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
 import 'package:flutter/material.dart';
 
-import '../widgets/showcase_widgets.dart';
+import '../../widgets/showcase_widgets.dart';
 
-class ButtonsScreen extends StatelessWidget {
-  const ButtonsScreen({super.key});
+class ButtonLayoutsScreen extends StatelessWidget {
+  const ButtonLayoutsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     ACDDialog.init(context);
 
     return CategoryScaffold(
-      title: 'Buttons & Actions',
+      title: 'Layouts',
+      color: Colors.indigo,
       children: [
         buildList([
           listItem(
@@ -56,7 +57,14 @@ class ButtonsScreen extends StatelessWidget {
         textAlign: TextAlign.center,
       )
       ..acdDivider()
-      ..oneButton(text: 'Done', color: Colors.teal, fontWeight: FontWeight.bold)
+      ..oneButton(
+        text: 'Done',
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+        backgroundColor: Colors.teal,
+        borderRadius: BorderRadius.circular(12),
+        icon: Icons.check_circle_outline,
+      )
       ..show();
   }
 

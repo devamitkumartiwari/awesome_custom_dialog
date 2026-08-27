@@ -1,3 +1,28 @@
+## 1.3.0
+
+### ✨ New Features
+- New `ACDAutocompleteField<T>` — a generic typeahead text field with local (`filterFn`) or remote (`onFind`, debounced) suggestion matching, a custom `itemBuilder`, and `submitOnSuggestionTap`/`clearOnSubmit` toggles.
+- New `ACDTriggerAutocompleteField` / `ACDAutocompleteTrigger` — a mention/hashtag-style field that reacts to multiple trigger characters (e.g. `@`, `#`) at once, each with its own async `optionsBuilder`, `triggerOnlyAtStart`/`triggerOnlyAfterSpace` rules, and minimum-character threshold.
+- New `ACDSlideAction` — a "slide/swipe to confirm" action bar with rectangle/circle shapes, `startToEnd`/`endToStart`/`dual` drag directions, RTL support, haptic feedback, an optional animated wave trail and label shimmer, active/inactive track and thumb colors, independent `elevationThumb`/`elevationTrack`/`trackPadding`, and full escape-hatch builders (`foregroundBuilder`/`backgroundBuilder`/`outerBackgroundBuilder`) for a fully custom look. Paired with `ACDSlideActionController` to drive `loading()`/`success()`/`reset()` from an async handler. `ACDSlideAction.swipeButton()` is a ready-made preset with a polished look out of the box, no styling required.
+- New `ACDDashedLine`, `ACDDottedDecoration` (a dashed/dotted `Decoration`, usable directly as `Container(decoration: ...)`), and `ACDDashedBorder` (wraps any child with a dashed rect/rounded-rect/oval/circle/custom-path outline) — all sharing one internal dash-path utility.
+- New `ACDStepper` — a compact step-progress indicator with horizontal (wizard) or vertical (timeline) layouts, circle/rounded-rectangle markers, per-status colors (finished/active/upcoming), tap-to-navigate via `onStepReached` + `steppingEnabled`, a fully custom `customStep` builder, and dashed or solid connector lines (reusing the dash-path utility above). `showLoadingAnimation` uses a plain built-in spinner, keeping the package dependency-free.
+- New `ACDStepperListView<T>` / `ACDStepperItemData<T>` / `ACDStepperThemeData` — a scrollable vertical timeline list (avatar/marker + connector line + content per row), with custom `avatarBuilder`/`labelBuilder`/`contentBuilder`, a `showLineOnLast` toggle, and dashed/solid line styling via `ACDStepperThemeData`.
+
+### 🎨 Customization parity pass
+Every feature — old and new — now offers the same baseline customization (colors, text styles, shapes, sizes, icons, elevation/shadow, gradients):
+
+- **Buttons** (`oneButton`/`twoButton`/`threeButton`): added `backgroundColor`, `borderRadius`, `elevation`/`boxShadow`, `icon`, and `gradient` per button slot — previously text-color/style only. A filled/gradient/shadowed button now gets sensible default internal padding automatically (the original flat text-button default was zero, which left a colored button's label jammed against its own rounded edge); an explicit `buttonPadding` still always wins. The button row also only takes a fixed height when you pass one explicitly, so a taller filled button is never clipped.
+- **Snackbar** (`ACDSnackbarContent`, `ACDDialog.snackbar()`): added `gradient`, `elevation`/`boxShadow`, and `titleFontSize`/`titleFontWeight`/`titleFontFamily`/`messageFontSize`/`messageFontWeight`/`messageFontFamily` shortcuts.
+- **Lists** (`listOfACDListTile`/`listOfACDRadioButton`/`listOfACDCheckbox`, `searchableList`/`multiSearchableList`): added a `borderRadius` per-row shape option everywhere; added `leading`/`trailing` to `ACDRadioItem`/`ACDCheckboxItem` (previously only `ACDListTileItem` had them); added a `searchIcon` override to the searchable list (previously hardcoded).
+- **`acdTextField`**: added `prefixIcon`/`suffixIcon`.
+- **Dashed/dotted/border trio** (`ACDDashedLine`/`ACDDottedDecoration`/`ACDDashedBorder`): `gradient` and `roundedCaps` — previously only `ACDDashedLine` had them.
+- **`ACDTriggerAutocompleteField`**: added the same `itemTextColor`/`itemFontSize`/`itemFontWeight`/`itemFontFamily`/`itemStyle` shortcuts `ACDAutocompleteField` already had.
+- **Autocomplete popups** (`ACDAutocompleteField`/`ACDTriggerAutocompleteField`): added `popupElevation`/`popupBorderRadius`/`popupColor` — previously hardcoded.
+- **`ACDStepper`/`ACDStepperListView`**: added per-status gradients, marker/avatar elevation, and an implicit `animationDuration`/`animationCurve` transition on status changes — previously flat colors with no transition.
+- **`ACDSlideAction`**: added `activeThumbGradient`/`inactiveThumbGradient`/`activeTrackGradient`/`inactiveTrackGradient`, matching the existing active/inactive color pairs — gradient users previously lost the idle/dragging visual distinction color users already had.
+
+All of the above are zero-dependency additions — no new packages were added to `pubspec.yaml`, and every change is additive (new optional parameters with defaults matching prior behavior). This release is fully backward compatible.
+
 ## 1.2.0
 
 ### ✨ New Features

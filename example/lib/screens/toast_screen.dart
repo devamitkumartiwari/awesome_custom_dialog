@@ -12,6 +12,7 @@ class ToastScreen extends StatelessWidget {
 
     return CategoryScaffold(
       title: 'Toast',
+      color: Colors.teal,
       children: [
         buildList([
           listItem(
@@ -39,6 +40,15 @@ class ToastScreen extends StatelessWidget {
             () => _showToastQueue(context),
           ),
         ]),
+        const CodeSnippet(
+          code: '''
+ACDDialog.toast(
+  context: context,
+  message: 'Copied to clipboard',
+  length: ACDToastLength.long,
+  showCloseButton: true,
+)..show();''',
+        ),
       ],
     );
   }

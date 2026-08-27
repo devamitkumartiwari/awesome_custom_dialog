@@ -22,14 +22,23 @@ class ACDSnackbarContent extends StatelessWidget {
     required this.message,
     this.contentType = ACDContentType.success,
     this.color,
+    this.gradient,
     this.icon,
     this.titleTextStyle,
+    this.titleFontSize,
+    this.titleFontWeight,
+    this.titleFontFamily,
     this.messageTextStyle,
+    this.messageFontSize,
+    this.messageFontWeight,
+    this.messageFontFamily,
     this.borderRadius = 20.0,
     this.padding,
     this.inMaterialBanner = false,
     this.onClose,
     this.closeIcon = Icons.close_rounded,
+    this.elevation = 0,
+    this.boxShadow,
   });
 
   /// The banner's bold heading.
@@ -44,16 +53,39 @@ class ACDSnackbarContent extends StatelessWidget {
   /// Overrides the background color implied by [contentType].
   final Color? color;
 
+  /// Gradient background, overriding [color]/[contentType]'s color when set.
+  final Gradient? gradient;
+
   /// Overrides the icon implied by [contentType].
   final IconData? icon;
 
-  /// Full style control for the title, merged over the default white/bold
-  /// style.
+  /// Full style control for the title, merged over
+  /// [titleFontSize]/[titleFontWeight]/[titleFontFamily] and the default
+  /// white/bold style.
   final TextStyle? titleTextStyle;
 
-  /// Full style control for the message, merged over the default white
-  /// style.
+  /// Title text size shortcut.
+  final double? titleFontSize;
+
+  /// Title text weight shortcut.
+  final FontWeight? titleFontWeight;
+
+  /// Title text font family shortcut.
+  final String? titleFontFamily;
+
+  /// Full style control for the message, merged over
+  /// [messageFontSize]/[messageFontWeight]/[messageFontFamily] and the
+  /// default white style.
   final TextStyle? messageTextStyle;
+
+  /// Message text size shortcut.
+  final double? messageFontSize;
+
+  /// Message text weight shortcut.
+  final FontWeight? messageFontWeight;
+
+  /// Message text font family shortcut.
+  final String? messageFontFamily;
 
   /// Corner radius of the banner card.
   final double borderRadius;
@@ -71,6 +103,13 @@ class ACDSnackbarContent extends StatelessWidget {
 
   /// Icon for the close button.
   final IconData closeIcon;
+
+  /// Drop-shadow elevation for the banner card. Ignored when [boxShadow] is
+  /// supplied.
+  final double elevation;
+
+  /// Explicit shadow for the banner card, overriding [elevation].
+  final List<BoxShadow>? boxShadow;
 
   @override
   Widget build(BuildContext context) {
@@ -90,8 +129,20 @@ class ACDSnackbarContent extends StatelessWidget {
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
-                  color: resolvedColor,
+                  color: gradient == null ? resolvedColor : null,
+                  gradient: gradient,
                   borderRadius: BorderRadius.circular(borderRadius),
+                  boxShadow:
+                      boxShadow ??
+                      (elevation > 0
+                          ? [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: elevation * 2,
+                                offset: Offset(0, elevation / 2),
+                              ),
+                            ]
+                          : null),
                 ),
               ),
             ),
@@ -122,8 +173,9 @@ class ACDSnackbarContent extends StatelessWidget {
                             title,
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: isTablet ? 22 : 18,
-                              fontWeight: FontWeight.w600,
+                              fontSize: titleFontSize ?? (isTablet ? 22 : 18),
+                              fontWeight: titleFontWeight ?? FontWeight.w600,
+                              fontFamily: titleFontFamily,
                             ).merge(titleTextStyle),
                           ),
                         ),
@@ -146,7 +198,9 @@ class ACDSnackbarContent extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: isTablet ? 16 : 14,
+                          fontSize: messageFontSize ?? (isTablet ? 16 : 14),
+                          fontWeight: messageFontWeight,
+                          fontFamily: messageFontFamily,
                         ).merge(messageTextStyle),
                       ),
                     ),

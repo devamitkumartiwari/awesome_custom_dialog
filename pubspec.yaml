@@ -1,9 +1,15 @@
 name: awesome_custom_dialog
-description: "Awesome flutter dialog makes easy to add custom dialogs inside application"
-version: 1.2.0
+description: "Chainable dialogs, toasts, snackbars, autocomplete, slide-to-confirm, dashed/dotted decorations, and steppers for Flutter — fully customizable, zero extra dependencies."
+version: 1.3.0
 homepage: https://github.com/devamitkumartiwari/awesome_custom_dialog
 repository: https://github.com/devamitkumartiwari/awesome_custom_dialog
 issue_tracker: https://github.com/devamitkumartiwari/awesome_custom_dialog/issues
+topics:
+  - dialog
+  - widgets
+  - forms
+  - animation
+  - ui
 
 
 environment:

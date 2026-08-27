@@ -12,6 +12,7 @@ class InputsScreen extends StatelessWidget {
 
     return CategoryScaffold(
       title: 'Inputs & Menus',
+      color: Colors.purple,
       children: [
         buildList([
           listItem(
@@ -45,6 +46,16 @@ class InputsScreen extends StatelessWidget {
             () => _showProgress(context),
           ),
         ]),
+        const CodeSnippet(
+          code: '''
+ACDDialog().build(context)
+  ..acdTextField(
+    hint: 'Enter your full name',
+    validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+  )
+  ..oneButton(text: 'Submit')
+  ..show();''',
+        ),
       ],
     );
   }

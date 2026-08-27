@@ -12,6 +12,7 @@ class PresetsScreen extends StatelessWidget {
 
     return CategoryScaffold(
       title: 'Presets & Feedback',
+      color: Colors.green,
       children: [
         buildGrid([
           actionCard(
@@ -39,6 +40,16 @@ class PresetsScreen extends StatelessWidget {
             () => _showInfo(context),
           ),
         ]),
+        const CodeSnippet(
+          code: '''
+ACDDialog().build(context)
+  ..success(
+    title: 'Payment Sent!',
+    message: 'Your transfer of \$42.00 was successful.',
+    onTap: () => print('success tapped'),
+  )
+  ..show();''',
+        ),
       ],
     );
   }

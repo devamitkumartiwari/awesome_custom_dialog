@@ -12,6 +12,7 @@ class AnimationsScreen extends StatelessWidget {
 
     return CategoryScaffold(
       title: 'Animations',
+      color: Colors.pink,
       children: [
         sectionHeader('Tap a chip to preview'),
         SingleChildScrollView(
@@ -30,6 +31,13 @@ class AnimationsScreen extends StatelessWidget {
                   'Rotate', () => _showAnimation(context, ACDAnimation.rotate)),
             ],
           ),
+        ),
+        const CodeSnippet(
+          code: '''
+ACDDialog().build(context)
+  ..animation = ACDAnimation.bounce
+  ..success(title: 'BOUNCE Animation')
+  ..show();''',
         ),
       ],
     );

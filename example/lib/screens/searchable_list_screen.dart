@@ -61,6 +61,7 @@ class SearchableListScreen extends StatelessWidget {
 
     return CategoryScaffold(
       title: 'Searchable List',
+      color: Colors.orange,
       children: [
         buildList([
           listItem(
@@ -88,6 +89,16 @@ class SearchableListScreen extends StatelessWidget {
             () => _showAsyncSearch(context),
           ),
         ]),
+        const CodeSnippet(
+          code: '''
+ACDDialog().build(context)
+  ..searchableList<String>(
+    items: countries,
+    searchHint: 'Search countries',
+    onChange: (country) => print('Picked \$country'),
+  )
+  ..show();''',
+        ),
       ],
     );
   }

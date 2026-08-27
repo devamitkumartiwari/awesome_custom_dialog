@@ -39,6 +39,8 @@ class ACDSearchableListTile<T> extends StatefulWidget {
     this.searchFillColor,
     this.searchBorderColor,
     this.searchBorderRadius = 4.0,
+    this.searchIcon = Icons.search,
+    this.borderRadius,
     this.physics,
     this.controller,
     this.searchController,
@@ -139,6 +141,13 @@ class ACDSearchableListTile<T> extends StatefulWidget {
 
   /// Corner radius of the search field.
   final double searchBorderRadius;
+
+  /// Icon shown at the start of the search field.
+  final IconData searchIcon;
+
+  /// Corner rounding for each row (ignored when [itemBuilder] is set — it
+  /// fully replaces row rendering).
+  final BorderRadius? borderRadius;
 
   /// Scroll physics for the list.
   final ScrollPhysics? physics;
@@ -420,7 +429,7 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
         controller: _searchController,
         decoration: InputDecoration(
           hintText: widget.searchHint ?? 'Search...',
-          prefixIcon: const Icon(Icons.search),
+          prefixIcon: Icon(widget.searchIcon),
           fillColor: widget.searchFillColor,
           filled: widget.searchFillColor != null,
           border: OutlineInputBorder(
@@ -492,6 +501,9 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
             child: ListTile(
               onTap: onTap,
               contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
+              shape: widget.borderRadius == null
+                  ? null
+                  : RoundedRectangleBorder(borderRadius: widget.borderRadius!),
               leading: widget.multiple
                   ? Checkbox(
                       value: selected,

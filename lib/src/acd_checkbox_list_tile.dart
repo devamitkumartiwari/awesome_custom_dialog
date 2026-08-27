@@ -5,6 +5,8 @@ class ACDCheckboxItem {
   /// Creates an [ACDCheckboxItem].
   const ACDCheckboxItem({
     this.padding,
+    this.leading,
+    this.trailing,
     this.text,
     this.color,
     this.fontSize,
@@ -16,6 +18,17 @@ class ACDCheckboxItem {
   /// Content padding for this option. Defaults to a sensible horizontal
   /// inset if unset.
   final EdgeInsets? padding;
+
+  /// Widget shown opposite the checkbox (before it, since the control
+  /// itself defaults to the trailing side). Ignored if [trailing] is also
+  /// set — `CheckboxListTile` only has one such slot, matching Flutter's
+  /// own constraint; set at most one of the two.
+  final Widget? leading;
+
+  /// Widget shown opposite the checkbox, with the control moved to the
+  /// leading side to make room. Takes priority over [leading] if both are
+  /// set — see [leading]'s note.
+  final Widget? trailing;
 
   /// The option's label.
   final String? text;
@@ -52,6 +65,7 @@ class ACDCheckboxListTile extends StatefulWidget {
     this.physics,
     this.controller,
     this.onChanged,
+    this.borderRadius,
   });
 
   /// The selectable options.
@@ -62,6 +76,9 @@ class ACDCheckboxListTile extends StatefulWidget {
 
   /// Background color of each row.
   final Color? color;
+
+  /// Corner rounding for each row.
+  final BorderRadius? borderRadius;
 
   /// Color of a checked checkbox.
   final Color? activeColor;
@@ -118,6 +135,15 @@ class _ACDCheckboxListTileState extends State<ACDCheckboxListTile> {
             // Flutter's own ListTile default instead.
             contentPadding:
                 item.padding ?? const EdgeInsets.symmetric(horizontal: 16.0),
+            // CheckboxListTile has one extra slot (`secondary`), not
+            // independent leading/trailing — see ACDCheckboxItem's dartdoc.
+            secondary: item.trailing ?? item.leading,
+            controlAffinity: item.trailing != null
+                ? ListTileControlAffinity.leading
+                : ListTileControlAffinity.platform,
+            shape: widget.borderRadius == null
+                ? null
+                : RoundedRectangleBorder(borderRadius: widget.borderRadius!),
             onChanged: (bool? checked) {
               setState(() {
                 if (checked == true) {
