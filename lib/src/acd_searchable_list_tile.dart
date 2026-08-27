@@ -7,9 +7,9 @@ import 'acd_search_state.dart';
 /// The widget behind `ACDDialog.searchableList()` /
 /// `ACDDialog.multiSearchableList()`. Not normally constructed directly.
 ///
-/// Selection is tracked with `==`/`hashCode`, so for multi-select ([multiple]
-/// `true`) a custom [T] must implement both consistently with value
-/// identity.
+/// Selection is tracked with `==`/`hashCode` by default, so for multi-select
+/// ([multiple] `true`) a custom [T] must implement both consistently with
+/// value identity — or pass [compareFn] to use custom equality instead.
 class ACDSearchableListTile<T> extends StatefulWidget {
   /// Creates an [ACDSearchableListTile].
   const ACDSearchableListTile({
@@ -50,6 +50,11 @@ class ACDSearchableListTile<T> extends StatefulWidget {
     this.cancelColor,
     this.confirmFontWeight,
     this.checkboxActiveColor,
+    this.compareFn,
+    this.isDisabledItem,
+    this.favoriteItems,
+    this.onFindPaged,
+    this.loadMoreBuilder,
   });
 
   /// The base dataset shown before any search, and searched locally when
@@ -171,6 +176,31 @@ class ACDSearchableListTile<T> extends StatefulWidget {
   /// Color of a checked row's checkbox (multi-select only).
   final Color? checkboxActiveColor;
 
+  /// Custom equality for selection tracking, used in place of `==` when
+  /// set. Lets a `T` without a value-based `==`/`hashCode` override still
+  /// work correctly for both single- and multi-select highlighting.
+  final bool Function(T a, T b)? compareFn;
+
+  /// Marks individual rows as non-interactive (dimmed, ignores taps).
+  final bool Function(T item)? isDisabledItem;
+
+  /// Shown pinned at the top of the idle (pre-search) list, ahead of
+  /// [items] — cleared once a search query narrows the list.
+  final List<T>? favoriteItems;
+
+  /// Paginated async search/load: called with the current query and a
+  /// zero-based page number, first for the idle (empty-query) page and
+  /// again for each page after as the list is scrolled to its end. Returning
+  /// fewer results than requested — including an empty list — marks the end
+  /// of the data. When set, this supersedes both [items] and [onFind]
+  /// entirely (idle state is just page 0 of an empty query).
+  final Future<List<T>> Function(String keyword, int page)? onFindPaged;
+
+  /// Trailing row shown at the end of the list while more of
+  /// [onFindPaged]'s pages remain to load. Defaults to a centered, small
+  /// spinner.
+  final Widget Function(BuildContext context)? loadMoreBuilder;
+
   @override
   State<ACDSearchableListTile<T>> createState() =>
       _ACDSearchableListTileState<T>();
@@ -187,10 +217,27 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
 
   String _labelOf(T item) => widget.itemAsString?.call(item) ?? item.toString();
 
+  // Pinned items first (in the order given), followed by the rest of
+  // [items] — only meaningful for the idle (pre-search) list.
+  List<T> get _idleItems {
+    final favorites = widget.favoriteItems;
+    if (favorites == null || favorites.isEmpty) return widget.items;
+    bool isFavorite(T item) => favorites.any((f) => _equals(f, item));
+    return [...favorites, ...widget.items.where((item) => !isFavorite(item))];
+  }
+
+  int _page = 0;
+  bool _hasMore = true;
+  bool _loadingMore = false;
+  ScrollController? _paginationController;
+  bool _ownsPaginationController = false;
+
+  bool get _paginating => widget.onFindPaged != null;
+
   @override
   void initState() {
     super.initState();
-    _state = ACDSearchIdle<T>(widget.items);
+    _state = ACDSearchIdle<T>(_idleItems);
     _selected = Set<T>.from(widget.initialValues ?? <T>[]);
     _selectedValue = widget.initialValue;
     if (widget.searchController != null) {
@@ -200,6 +247,16 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
       _ownsSearchController = true;
     }
     _searchController.addListener(_onQueryChanged);
+    if (_paginating) {
+      if (widget.controller != null) {
+        _paginationController = widget.controller;
+      } else {
+        _paginationController = ScrollController();
+        _ownsPaginationController = true;
+      }
+      _paginationController!.addListener(_maybeLoadMore);
+      _loadPage(query: '', reset: true);
+    }
   }
 
   @override
@@ -207,17 +264,67 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
     _debounce?.cancel();
     _searchController.removeListener(_onQueryChanged);
     if (_ownsSearchController) _searchController.dispose();
+    _paginationController?.removeListener(_maybeLoadMore);
+    if (_ownsPaginationController) _paginationController?.dispose();
     super.dispose();
   }
 
   void _onQueryChanged() {
     final query = _searchController.text;
     _debounce?.cancel();
+    if (_paginating) {
+      _debounce = Timer(
+        widget.searchDebounce,
+        () => _loadPage(query: query, reset: true),
+      );
+      return;
+    }
     if (query.isEmpty) {
-      setState(() => _state = ACDSearchIdle<T>(widget.items));
+      setState(() => _state = ACDSearchIdle<T>(_idleItems));
       return;
     }
     _debounce = Timer(widget.searchDebounce, () => _runSearch(query));
+  }
+
+  void _maybeLoadMore() {
+    if (_loadingMore || !_hasMore) return;
+    final position = _paginationController!.position;
+    if (position.pixels >= position.maxScrollExtent - 200) {
+      _loadPage(query: _searchController.text, reset: false);
+    }
+  }
+
+  Future<void> _loadPage({required String query, required bool reset}) async {
+    if (reset) {
+      _page = 0;
+      _hasMore = true;
+    }
+    if (!_hasMore) return;
+    final int generation = reset ? ++_searchGeneration : _searchGeneration;
+    setState(
+      () => reset ? _state = const ACDSearchLoading() : _loadingMore = true,
+    );
+    try {
+      final results = await widget.onFindPaged!(query, _page);
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _loadingMore = false;
+        _hasMore = results.isNotEmpty;
+        if (_hasMore) _page++;
+        final List<T> merged = reset
+            ? results
+            : [...(_state as ACDSearchLoaded<T>).items, ...results];
+        _state = merged.isEmpty
+            ? ACDSearchEmpty<T>(query)
+            : ACDSearchLoaded<T>(merged);
+      });
+    } catch (error, stackTrace) {
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _loadingMore = false;
+        if (reset) _state = ACDSearchError<T>(error, query, stackTrace);
+      });
+    }
   }
 
   Future<void> _runSearch(String query) async {
@@ -253,11 +360,29 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
     );
   }
 
+  bool _equals(T a, T b) => widget.compareFn?.call(a, b) ?? a == b;
+
+  // Set.contains()/remove() rely on ==/hashCode, so a compareFn-driven
+  // lookup has to fall back to a linear scan for the actual stored instance
+  // (which may not be == to `item` even though compareFn considers them a
+  // match).
+  T? _findInSelected(T item) {
+    if (widget.compareFn == null) {
+      return _selected.contains(item) ? item : null;
+    }
+    for (final candidate in _selected) {
+      if (widget.compareFn!(candidate, item)) return candidate;
+    }
+    return null;
+  }
+
   void _handleTap(T item) {
+    if (widget.isDisabledItem?.call(item) ?? false) return;
     if (widget.multiple) {
       setState(() {
-        if (_selected.contains(item)) {
-          _selected.remove(item);
+        final existing = _findInSelected(item);
+        if (existing != null) {
+          _selected.remove(existing);
         } else {
           _selected.add(item);
         }
@@ -269,8 +394,11 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
     if (widget.isClickAutoDismiss) widget.dialogDismiss?.call();
   }
 
-  bool _isSelected(T item) =>
-      widget.multiple ? _selected.contains(item) : _selectedValue == item;
+  bool _isSelected(T item) {
+    if (widget.multiple) return _findInSelected(item) != null;
+    final selectedValue = _selectedValue;
+    return selectedValue != null && _equals(selectedValue, item);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -323,44 +451,66 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
   }
 
   Widget _buildList(BuildContext context, List<T> items) {
+    final bool showLoadMoreRow = _paginating && _hasMore;
     return ListView.builder(
       padding: EdgeInsets.zero,
       shrinkWrap: true,
       physics: widget.physics,
-      controller: widget.controller,
-      itemCount: items.length,
+      controller: _paginating ? _paginationController : widget.controller,
+      itemCount: items.length + (showLoadMoreRow ? 1 : 0),
       itemBuilder: (context, index) {
+        if (index >= items.length) {
+          return widget.loadMoreBuilder?.call(context) ??
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              );
+        }
         final item = items[index];
         final selected = _isSelected(item);
+        final disabled = widget.isDisabledItem?.call(item) ?? false;
+        final onTap = disabled ? null : () => _handleTap(item);
         if (widget.itemBuilder != null) {
-          return InkWell(
-            onTap: () => _handleTap(item),
-            child: widget.itemBuilder!(context, item, selected),
+          return Opacity(
+            opacity: disabled ? 0.4 : 1.0,
+            child: InkWell(
+              onTap: onTap,
+              child: widget.itemBuilder!(context, item, selected),
+            ),
           );
         }
-        return Material(
-          color: widget.tileColor,
-          child: ListTile(
-            onTap: () => _handleTap(item),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
-            leading: widget.multiple
-                ? Checkbox(
-                    value: selected,
-                    activeColor: widget.checkboxActiveColor,
-                    onChanged: (_) => _handleTap(item),
-                  )
-                : null,
-            trailing: !widget.multiple && selected
-                ? const Icon(Icons.check)
-                : null,
-            title: Text(
-              _labelOf(item),
-              style: TextStyle(
-                color: widget.color,
-                fontSize: widget.fontSize,
-                fontWeight: widget.fontWeight,
-                fontFamily: widget.fontFamily,
-              ).merge(widget.style),
+        return Opacity(
+          opacity: disabled ? 0.4 : 1.0,
+          child: Material(
+            color: widget.tileColor,
+            child: ListTile(
+              onTap: onTap,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
+              leading: widget.multiple
+                  ? Checkbox(
+                      value: selected,
+                      activeColor: widget.checkboxActiveColor,
+                      onChanged: disabled ? null : (_) => _handleTap(item),
+                    )
+                  : null,
+              trailing: !widget.multiple && selected
+                  ? const Icon(Icons.check)
+                  : null,
+              title: Text(
+                _labelOf(item),
+                style: TextStyle(
+                  color: widget.color,
+                  fontSize: widget.fontSize,
+                  fontWeight: widget.fontWeight,
+                  fontFamily: widget.fontFamily,
+                ).merge(widget.style),
+              ),
             ),
           ),
         );

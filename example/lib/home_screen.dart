@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'screens/animations_screen.dart';
 import 'screens/buttons_screen.dart';
+import 'screens/dropdown_field_screen.dart';
 import 'screens/inputs_screen.dart';
 import 'screens/positioning_screen.dart';
 import 'screens/presets_screen.dart';
@@ -54,6 +55,13 @@ final List<_Category> _categories = [
     icon: Icons.search,
     color: Colors.orange,
     builder: (_) => const SearchableListScreen(),
+  ),
+  _Category(
+    title: 'Dropdown Field',
+    subtitle: 'Inline Form field: dialog, bottom sheet, or menu popup',
+    icon: Icons.arrow_drop_down_circle_outlined,
+    color: Colors.cyan,
+    builder: (_) => const DropdownFieldScreen(),
   ),
   _Category(
     title: 'Animations',

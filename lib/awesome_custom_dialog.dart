@@ -15,6 +15,8 @@ export 'src/acd_dialog_queue.dart';
 export 'src/acd_dialog_searchable_list.dart';
 export 'src/acd_dialog_text.dart';
 export 'src/acd_dialog_widgets.dart';
+export 'src/acd_dropdown_field.dart';
+export 'src/acd_dropdown_mode.dart';
 export 'src/acd_gravity.dart' show ACDGravity;
 export 'src/acd_list_tile_item.dart';
 export 'src/acd_presenter.dart';

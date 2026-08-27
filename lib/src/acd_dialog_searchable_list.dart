@@ -41,6 +41,11 @@ extension ACDDialogSearchableList on ACDDialog {
     ScrollPhysics? physics,
     ScrollController? controller,
     TextEditingController? searchController,
+    bool Function(T a, T b)? compareFn,
+    bool Function(T item)? isDisabledItem,
+    List<T>? favoriteItems,
+    Future<List<T>> Function(String keyword, int page)? onFindPaged,
+    Widget Function(BuildContext context)? loadMoreBuilder,
   }) {
     if (context == null) return this;
     final size = MediaQuery.of(context!).size;
@@ -81,6 +86,11 @@ extension ACDDialogSearchableList on ACDDialog {
           controller: controller,
           searchController: searchController,
           dialogDismiss: dismiss,
+          compareFn: compareFn,
+          isDisabledItem: isDisabledItem,
+          favoriteItems: favoriteItems,
+          onFindPaged: onFindPaged,
+          loadMoreBuilder: loadMoreBuilder,
         ),
       ),
     );
@@ -95,7 +105,8 @@ extension ACDDialogSearchableList on ACDDialog {
   /// compose your own confirm action instead).
   ///
   /// A custom [T] must implement `==`/`hashCode` consistent with value
-  /// identity, since the current selection is tracked in a `Set<T>`.
+  /// identity, since the current selection is tracked in a `Set<T>` — or
+  /// pass [compareFn] to use custom equality instead.
   ACDDialog multiSearchableList<T>({
     required List<T> items,
     String Function(T item)? itemAsString,
@@ -130,6 +141,11 @@ extension ACDDialogSearchableList on ACDDialog {
     ScrollPhysics? physics,
     ScrollController? controller,
     TextEditingController? searchController,
+    bool Function(T a, T b)? compareFn,
+    bool Function(T item)? isDisabledItem,
+    List<T>? favoriteItems,
+    Future<List<T>> Function(String keyword, int page)? onFindPaged,
+    Widget Function(BuildContext context)? loadMoreBuilder,
   }) {
     if (context == null) return this;
     final size = MediaQuery.of(context!).size;
@@ -176,6 +192,11 @@ extension ACDDialogSearchableList on ACDDialog {
           controller: controller,
           searchController: searchController,
           dialogDismiss: dismiss,
+          compareFn: compareFn,
+          isDisabledItem: isDisabledItem,
+          favoriteItems: favoriteItems,
+          onFindPaged: onFindPaged,
+          loadMoreBuilder: loadMoreBuilder,
         ),
       ),
     );

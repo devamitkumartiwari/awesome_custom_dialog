@@ -15,6 +15,7 @@ A simple, flexible way to show dialogs, toasts, and snackbars in Flutter — all
 - **Smooth animations**: Fade, scale, bounce, rotate, and slide.
 - **Everything you need inside**: text, buttons (one/two/three), radio lists, checkboxes, progress spinners, images, and text fields (with optional validation).
 - **Searchable lists**: A filterable, generic `<T>` list for the dialog — single- or multi-select, local filtering or async `onFind` remote search with loading/empty/error states.
+- **Dropdown fields**: `ACDDropdownField<T>` / `ACDMultiDropdownField<T>` — an inline, `Form`-compatible searchable dropdown (validator, clear button, disabled items, pinned favorites, paginated search) that opens as a dialog, bottom sheet, or anchored menu.
 - **Toast messages**: A tiny, auto-dismissing message that never blocks the rest of your screen — with length, close button, and cancel support.
 - **Snackbar messages**: Colorful success/failure/warning/help banners, usable on their own or through the dialog API.
 - **Style everything**: Colors, fonts, padding, corner radius, and icons are all customizable, everywhere — with sensible defaults if you change nothing.
@@ -119,6 +120,101 @@ ACDDialog().build(context)
 ```
 Pass your own model type instead of `String` for typed selections (`itemAsString` extracts the label, `itemBuilder` fully customizes each row), or use `.multiSearchableList<T>()` for a multi-select version with a built-in Confirm/Cancel row. Supply `onFind` on either to delegate non-empty queries to your own async/remote search instead of filtering `items` locally.
 
+### 7. Dropdown Field
+
+`searchableList()` above only works as content inside an already-open `ACDDialog`. `ACDDropdownField<T>` is the inline counterpart — a real `FormField<T>`, so it drops straight into a `Form` with a `validator`, sits next to your other fields, and shows the current selection itself.
+
+**Basic usage, inside a `Form`:**
+```dart
+ACDDropdownField<String>(
+  items: countries,
+  decoration: const InputDecoration(labelText: "Country"),
+  searchHint: "Search countries",
+  validator: (value) => value == null ? "Required" : null,
+  onChanged: (value) => print("Picked $value"),
+)
+```
+
+**Popup presentation** — `mode` controls how it opens: a centered dialog (default), a bottom sheet, or a non-modal menu anchored directly under the field:
+```dart
+ACDDropdownField<String>(
+  items: skills,
+  mode: ACDDropdownMode.bottomSheet, // or .dialog (default) / .menu
+  decoration: const InputDecoration(labelText: "Primary skill"),
+  onChanged: (value) => print("Skill: $value"),
+)
+```
+
+**Multi-select**, with `ACDMultiDropdownField<T>` — same shape, `List<T>` value, confirmed via the popup's OK button:
+```dart
+ACDMultiDropdownField<String>(
+  items: skills,
+  decoration: const InputDecoration(labelText: "Skills"),
+  checkboxActiveColor: Colors.teal,
+  onChanged: (values) => print("Skills: $values"),
+)
+```
+
+**Clear button & custom closed-state display** — `showClearButton` adds a trailing clear icon once something's selected; `dropdownBuilder` fully replaces the default `Text` shown when closed:
+```dart
+ACDDropdownField<String>(
+  items: countries,
+  showClearButton: true,
+  dropdownBuilder: (context, value) => value == null
+      ? const Text("Choose a country")
+      : Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [const Icon(Icons.flag, size: 16), const SizedBox(width: 6), Text(value)],
+        ),
+  onChanged: (value) => print("Picked $value"),
+)
+```
+
+**Styling** — the closed-state field takes a normal `InputDecoration` (label, hint, border, fill, prefix/suffix icons — everything `TextFormField` accepts), and the popup's rows and search box style independently via `itemTextColor`/`itemFontSize`/`itemFontWeight`/`itemFontFamily`/`itemStyle` (or `itemBuilder` for full control), `tileColor`, and `searchFillColor`/`searchBorderColor`/`searchBorderRadius`:
+```dart
+ACDDropdownField<String>(
+  items: countries,
+  decoration: InputDecoration(
+    labelText: "Country",
+    prefixIcon: const Icon(Icons.public),
+    filled: true,
+    fillColor: Colors.grey.shade100,
+    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+  ),
+  itemTextColor: Colors.teal.shade900,
+  itemFontWeight: FontWeight.w600,
+  tileColor: Colors.teal.shade50,
+  searchFillColor: Colors.white,
+  searchBorderColor: Colors.teal,
+  searchBorderRadius: 12,
+  showClearButton: true,
+  clearIcon: Icons.cancel_rounded,
+  onChanged: (value) => print("Picked $value"),
+)
+```
+
+**Custom equality, disabled rows, and pinned favorites** — `compareFn` lets a model type skip a `==`/`hashCode` override, `isDisabledItem` greys out and disables specific rows, and `favoriteItems` pins items to the top of the list before any search:
+```dart
+ACDDropdownField<User>(
+  items: users,
+  itemAsString: (u) => u.name,
+  compareFn: (a, b) => a.id == b.id,        // instead of a ==/hashCode override
+  isDisabledItem: (u) => u.id == blockedId,  // greyed out, ignores taps
+  favoriteItems: [currentUser],              // pinned to the top
+  onChanged: (user) => print("Assigned to ${user?.name}"),
+)
+```
+
+**Paginated / infinite-scroll search** — `onFindPaged(query, page)` loads another page as the list is scrolled to its end; return fewer results than requested (or `[]`) to signal there's no more data:
+```dart
+ACDDropdownField<String>(
+  items: const [],
+  onFindPaged: (query, page) => api.search(query, page: page, pageSize: 20),
+  decoration: const InputDecoration(labelText: "Search a large remote list"),
+  onChanged: (value) => print("Picked $value"),
+)
+```
+
 ---
 
 ## 🍞 Toast
@@ -191,10 +287,11 @@ ACDDialog.snackbar(
 
 ## 🎨 Customizing Everything
 
-Every part of every dialog, toast, and snackbar can be styled — and everything has a sensible default if you don't touch it:
+Every part of every dialog, toast, snackbar, and dropdown field can be styled — and everything has a sensible default if you don't touch it:
 
 - **Color**: `color`, `backgroundColor`, `iconColor`, `titleColor`, `messageColor`, and more, depending on what you're building.
 - **Font**: `fontFamily`, `fontSize`, `fontWeight` as quick shortcuts, or pass a full `TextStyle` (`style`, `titleStyle`, `messageStyle`, `textStyle1`/`2`/`3`...) for complete control — letter spacing, italics, underlines, anything `TextStyle` supports.
+- **Dropdown fields**: `ACDDropdownField`/`ACDMultiDropdownField` take a standard `InputDecoration` for the closed-state field (label, hint, border, fill, icons — same as `TextFormField`), plus their own `itemTextColor`/`itemFontSize`/`itemFontWeight`/`itemFontFamily`/`itemStyle`, `tileColor`, and `searchFillColor`/`searchBorderColor`/`searchBorderRadius` for the popup — see the styling example in [Dropdown Field](#7-dropdown-field) above.
 - **Corners**: `borderRadius` is available on dialogs, images, text fields, toasts, and snackbars. For a dialog that only wants *some* corners rounded (like a side panel sitting flush against an edge), pass a full `cornerRadius` instead:
   ```dart
   ACDDialog().build(context)
@@ -225,6 +322,7 @@ Every part of every dialog, toast, and snackbar can be styled — and everything
 | `.acdDivider()` | A horizontal divider line. |
 | `.listOfACDListTile()` / `.listOfACDRadioButton()` / `.listOfACDCheckbox()` | Scrollable list content. |
 | `.searchableList<T>()` / `.multiSearchableList<T>()` | Filterable single/multi-select list, generic over your item type, with optional async `onFind` search. |
+| `ACDDropdownField<T>` / `ACDMultiDropdownField<T>` | Inline, `Form`-compatible searchable dropdown — dialog/bottomSheet/menu popup, validator, clear button, paginated search. |
 | `.autoDismissAfter` | Close automatically after a duration. |
 | `.gravity` | Where the dialog appears (`ACDGravity`: left, top, bottom, right, center, corners...). |
 | `.animation` | How it appears (`ACDAnimation`: fade, scale, bounce, rotate, slide...). |

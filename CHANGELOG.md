@@ -1,3 +1,16 @@
+## 1.2.0
+
+### ✨ New Features
+- New `ACDDropdownField<T>` / `ACDMultiDropdownField<T>` — an inline, `Form`-compatible searchable dropdown (a real `FormField<T>`, so it works with `validator`/`onSaved`/`enabled` like any other form field). Tapping it opens the same filterable list as `.searchableList()`, presented as a `dialog` (default), `bottomSheet`, or a non-modal `menu` anchored directly under the field (`ACDDropdownMode`).
+- `.searchableList()` / `.multiSearchableList()` and the new dropdown fields all gained:
+  - `compareFn` — custom equality for selection tracking, so a model type no longer needs a `==`/`hashCode` override.
+  - `isDisabledItem` — greys out and disables individual rows.
+  - `favoriteItems` — pins items to the top of the list before any search.
+  - `onFindPaged(query, page)` — infinite-scroll pagination for async search/loading; loads another page as the list is scrolled to its end.
+- `ACDDropdownField` additionally supports `showClearButton` (a trailing clear icon) and `dropdownBuilder` (fully custom closed-state display).
+
+This release is fully backward compatible — every addition above is optional, and no existing method signature changed.
+
 ## 1.1.0
 
 ### ✨ New Features
