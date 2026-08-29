@@ -1,5 +1,5 @@
 name: awesome_custom_dialog
-description: "Chainable dialogs, toasts, snackbars, autocomplete, slide-to-confirm, switches, rating bars, motion/animated text, dashed/dotted decorations, and steppers for Flutter — fully customizable, zero extra dependencies."
+description: "Chainable dialogs, toasts, snackbars, autocomplete, switches, rating bars, motion, dashed/dotted decorations, and steppers for Flutter — customizable, zero dependencies."
 version: 1.4.0
 homepage: https://github.com/devamitkumartiwari/awesome_custom_dialog
 repository: https://github.com/devamitkumartiwari/awesome_custom_dialog
