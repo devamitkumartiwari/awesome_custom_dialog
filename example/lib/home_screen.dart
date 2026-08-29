@@ -8,12 +8,15 @@ import 'screens/customization/customization_hub_screen.dart';
 import 'screens/dashed/dashed_hub_screen.dart';
 import 'screens/dropdown/dropdown_hub_screen.dart';
 import 'screens/inputs_screen.dart';
+import 'screens/motion/motion_hub_screen.dart';
 import 'screens/positioning_screen.dart';
 import 'screens/presets_screen.dart';
+import 'screens/rating_bar/rating_bar_hub_screen.dart';
 import 'screens/searchable_list_screen.dart';
 import 'screens/slide_action/slide_action_hub_screen.dart';
 import 'screens/snackbar_screen.dart';
 import 'screens/stepper/stepper_hub_screen.dart';
+import 'screens/switch/switch_hub_screen.dart';
 import 'screens/toast_screen.dart';
 import 'screens/animations_screen.dart';
 import 'theme/app_theme.dart';
@@ -116,6 +119,22 @@ final List<_Category> _categories = [
     builder: (_) => const SlideActionHubScreen(),
   ),
   _Category(
+    title: 'Switch',
+    subtitle: 'Fully customizable toggle switch',
+    icon: Icons.toggle_on_outlined,
+    color: Colors.cyan,
+    group: _controlsGroup,
+    builder: (_) => const SwitchHubScreen(),
+  ),
+  _Category(
+    title: 'Rating Bar',
+    subtitle: 'Tap/drag star rating, continuous precision, presets',
+    icon: Icons.star_rate_rounded,
+    color: Colors.amber,
+    group: _controlsGroup,
+    builder: (_) => const RatingBarHubScreen(),
+  ),
+  _Category(
     title: 'Dashed & Dotted',
     subtitle: 'Dashed lines, box decoration, and border wrapper',
     icon: Icons.border_style,
@@ -138,6 +157,14 @@ final List<_Category> _categories = [
     color: Colors.pink,
     group: _decorationGroup,
     builder: (_) => const AnimationsScreen(),
+  ),
+  _Category(
+    title: 'Motion & Animated Text',
+    subtitle: 'Entrance/rest/gesture effects, per-character text',
+    icon: Icons.movie_filter_outlined,
+    color: Colors.pinkAccent,
+    group: _decorationGroup,
+    builder: (_) => const MotionHubScreen(),
   ),
   _Category(
     title: 'Positioning & Misc',
@@ -284,7 +311,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       Chip(
                         avatar: Icon(Icons.widgets_outlined, size: 16),
-                        label: Text('13+ features'),
+                        label: Text('16+ features'),
                       ),
                       Chip(
                         avatar: Icon(Icons.block_flipped, size: 16),
@@ -404,7 +431,7 @@ class _HomeScreenState extends State<HomeScreen> {
       )
       ..text(
         padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-        text: 'v1.3.0 • MIT License',
+        text: 'v1.4.0 • MIT License',
         color: Colors.black38,
         alignment: Alignment.center,
       )

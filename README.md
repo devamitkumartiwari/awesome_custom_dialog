@@ -1,6 +1,6 @@
 # awesome_custom_dialog
 
-A simple, flexible way to show dialogs, toasts, snackbars, autocomplete fields, slide-to-confirm actions, dashed/dotted decorations, and steppers in Flutter — all with one easy-to-chain API. No extra packages needed.
+A simple, flexible way to show dialogs, toasts, snackbars, autocomplete fields, slide-to-confirm actions, switches, rating bars, motion/animated text, dashed/dotted decorations, and steppers in Flutter — all with one easy-to-chain API. No extra packages needed.
 
 [![pub package](https://img.shields.io/pub/v/awesome_custom_dialog.svg)](https://pub.dev/packages/awesome_custom_dialog)
 [![license](https://img.shields.io/github/license/devamitkumartiwari/awesome_custom_dialog.svg)](https://github.com/devamitkumartiwari/awesome_custom_dialog/blob/master/LICENSE)
@@ -9,7 +9,6 @@ A simple, flexible way to show dialogs, toasts, snackbars, autocomplete fields, 
 
 ## Contents
 
-- [🚀 Key Features](#-key-features)
 - [🎖 Installation](#-installation)
 - [📖 Usage Examples](#-usage-examples)
   1. [Simple Success Preset](#1-simple-success-preset)
@@ -23,33 +22,17 @@ A simple, flexible way to show dialogs, toasts, snackbars, autocomplete fields, 
   9. [Slide to Confirm](#9-slide-to-confirm)
   10. [Dashed and Dotted Decoration](#10-dashed-and-dotted-decoration)
   11. [Stepper](#11-stepper)
+  12. [Switch](#12-switch)
+  13. [Rating Bar](#13-rating-bar)
+  14. [Motion & Animated Text](#14-motion--animated-text)
 - [🍞 Toast](#-toast)
 - [🍫 Snackbar](#-snackbar)
 - [🎨 Customizing Everything](#-customizing-everything)
+- [🚀 Key Features](#-key-features)
 - [🛠 API Overview](#-api-overview)
 - [⚙️ A Few More Things](#️-a-few-more-things)
 - [🤝 Contributing](#-contributing)
 - [📜 License](#-license)
-
----
-
-## 🚀 Key Features
-
-- **Chainable API**: Build a dialog step by step with `..` calls, then `.show()` it.
-- **10 Positions**: Show your dialog centered, top, bottom, or in any corner.
-- **Ready-made dialogs**: Success, Error, Warning, and Info — just fill in a title and message.
-- **Smooth animations**: Fade, scale, bounce, rotate, and slide.
-- **Everything you need inside**: text, buttons (one/two/three), radio lists, checkboxes, progress spinners, images, and text fields (with optional validation).
-- **Searchable lists**: A filterable, generic `<T>` list for the dialog — single- or multi-select, local filtering or async `onFind` remote search with loading/empty/error states.
-- **Dropdown fields**: `ACDDropdownField<T>` / `ACDMultiDropdownField<T>` — an inline, `Form`-compatible searchable dropdown (validator, clear button, disabled items, pinned favorites, paginated search) that opens as a dialog, bottom sheet, or anchored menu.
-- **Autocomplete**: `ACDAutocompleteField<T>` — a generic typeahead field with local or remote search — and `ACDTriggerAutocompleteField` for multi-trigger `@mention`/`#hashtag`-style autocomplete.
-- **Slide to confirm**: `ACDSlideAction` — a drag-to-confirm action bar with RTL support, haptics, and loading/success feedback via `ACDSlideActionController`, plus a ready-made `.swipeButton` preset that needs no styling at all.
-- **Dashed & dotted decoration**: `ACDDashedLine`, `ACDDottedDecoration` (a drop-in `Decoration`), and `ACDDashedBorder` (wraps any widget, including custom-path outlines).
-- **Stepper**: `ACDStepper` — a horizontal wizard or vertical timeline progress indicator — and `ACDStepperListView<T>` for a scrollable timeline list.
-- **Toast messages**: A tiny, auto-dismissing message that never blocks the rest of your screen — with length, close button, and cancel support.
-- **Snackbar messages**: Colorful success/failure/warning/help banners, usable on their own or through the dialog API.
-- **Style everything**: Colors, gradients, fonts, padding, corner radius, elevation/shadow, and icons are all customizable, everywhere — with sensible defaults if you change nothing.
-- **No extra dependencies**: Just Flutter itself.
 
 ---
 
@@ -59,7 +42,7 @@ Add this to your package's `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  awesome_custom_dialog: ^1.0.0
+  awesome_custom_dialog: ^1.4.0
 ```
 
 ---
@@ -358,6 +341,57 @@ ACDStepperListView<String>(
 
 ---
 
+### 12. Switch
+
+`ACDSwitch` is a fully customizable, dependency-free toggle:
+```dart
+ACDSwitch(
+  initialValue: isEnabled,
+  activeTrackColor: Colors.green,
+  onChanged: (value) => setState(() => isEnabled = value),
+)
+```
+Works controlled (`value`/`onChanged`, like `Checkbox`), uncontrolled (`initialValue`), or driven by an external `ValueNotifier<bool>` `controller`. `ACDSwitch.material()`/`ACDSwitch.ios()` are ready-made platform presets. Every surface — track, thumb, border — accepts active/inactive/disabled colors *and* gradients, plus a `trackShapeBorder`/`thumbShapeBorder` escape hatch for any `ShapeBorder`. `dragEnabled` (default `true`) lets the thumb be dragged like a native switch.
+
+---
+
+### 13. Rating Bar
+
+`ACDRatingBar` is a fully customizable, dependency-free rating bar:
+```dart
+ACDRatingBar(
+  initialRating: 3,
+  allowHalfRating: true,
+  onRatingUpdate: (rating) => debugPrint('Rated $rating'),
+)
+```
+`interactionMode` (`tapAndDrag`/`tapOnly`/`dragOnly`/`none`) controls input — use `.none` in place of a separate read-only "indicator" widget. Swap `filledIcon`/`emptyIcon` for a quick look change (e.g. hearts), or set `itemIconStyle: ACDRatingIconStyle.vectorStar` for a true vector star (Flutter's built-in `StarBorder` shape, not a font glyph) with `starPoints`/`starPointRounding` control. An opt-in continuous `ratingPrecision` (e.g. `0.1`) allows exact-fraction ratings beyond whole/half stars.
+
+---
+
+### 14. Motion & Animated Text
+
+`ACDMotion` wraps any widget with entrance/exit/rest/tap effects, sharing one `ACDMotionEffect` vocabulary (opacity, offset, scale, rotation, skew, blur):
+```dart
+ACDMotion(
+  effect: ACDMotionEffect.fadeSlideIn(),
+  restEffect: const ACDRestEffectConfig(effect: ACDMotionRestEffect.pulse),
+  onTap: () => debugPrint('tapped'),
+  child: const FlutterLogo(),
+)
+```
+`ACDAnimatedText` animates a string in per-character, grapheme- and RTL-aware, from a single `AnimationController` so `onComplete` fires reliably even for text ending in whitespace:
+```dart
+ACDAnimatedText(
+  text: 'Hello, world!',
+  effect: ACDMotionEffect.fadeSlideIn(),
+  onComplete: () => debugPrint('done'),
+)
+```
+Flip `visible` to `false` to play `exitEffect` (defaults to `effect` reversed) instead of unmounting. `ACDMotionSequence`/`ACDAnimatedTextSequence` chain multiple steps, time- or tap-triggered, with optional looping.
+
+---
+
 ## 🍞 Toast
 
 A small message that appears briefly and disappears on its own — like a native Android toast, but on any platform. It never blocks taps on the rest of your app.
@@ -470,6 +504,29 @@ Every part of every dialog, toast, snackbar, dropdown field, autocomplete field,
 
 ---
 
+## 🚀 Key Features
+
+- **Chainable API**: Build a dialog step by step with `..` calls, then `.show()` it.
+- **10 Positions**: Show your dialog centered, top, bottom, or in any corner.
+- **Ready-made dialogs**: Success, Error, Warning, and Info — just fill in a title and message.
+- **Smooth animations**: Fade, scale, bounce, rotate, and slide.
+- **Everything you need inside**: text, buttons (one/two/three), radio lists, checkboxes, progress spinners, images, and text fields (with optional validation).
+- **Searchable lists**: A filterable, generic `<T>` list for the dialog — single- or multi-select, local filtering or async `onFind` remote search with loading/empty/error states.
+- **Dropdown fields**: `ACDDropdownField<T>` / `ACDMultiDropdownField<T>` — an inline, `Form`-compatible searchable dropdown (validator, clear button, disabled items, pinned favorites, paginated search) that opens as a dialog, bottom sheet, or anchored menu.
+- **Autocomplete**: `ACDAutocompleteField<T>` — a generic typeahead field with local or remote search — and `ACDTriggerAutocompleteField` for multi-trigger `@mention`/`#hashtag`-style autocomplete.
+- **Slide to confirm**: `ACDSlideAction` — a drag-to-confirm action bar with RTL support, haptics, and loading/success feedback via `ACDSlideActionController`, plus a ready-made `.swipeButton` preset that needs no styling at all.
+- **Switch**: `ACDSwitch` — a fully customizable toggle (shapes, gradients, images, custom track/thumb widgets, RTL, drag-to-toggle) with `.material()`/`.ios()` presets.
+- **Rating bar**: `ACDRatingBar` — tap/drag star (or any icon, or a true vector star) rating with half-star, continuous-precision, glow, and pop-animation support.
+- **Motion & animated text**: `ACDMotion`/`ACDMotionSequence` — an entrance/exit/rest/tap animation wrapper for any widget — and `ACDAnimatedText`/`ACDAnimatedTextSequence` for per-character staggered text, both sharing one `ACDMotionEffect` vocabulary.
+- **Dashed & dotted decoration**: `ACDDashedLine`, `ACDDottedDecoration` (a drop-in `Decoration`), and `ACDDashedBorder` (wraps any widget, including custom-path outlines).
+- **Stepper**: `ACDStepper` — a horizontal wizard or vertical timeline progress indicator — and `ACDStepperListView<T>` for a scrollable timeline list.
+- **Toast messages**: A tiny, auto-dismissing message that never blocks the rest of your screen — with length, close button, and cancel support.
+- **Snackbar messages**: Colorful success/failure/warning/help banners, usable on their own or through the dialog API.
+- **Style everything**: Colors, gradients, fonts, padding, corner radius, elevation/shadow, and icons are all customizable, everywhere — with sensible defaults if you change nothing.
+- **No extra dependencies**: Just Flutter itself.
+
+---
+
 ## 🛠 API Overview
 
 | Method | Description |
@@ -493,6 +550,10 @@ Every part of every dialog, toast, snackbar, dropdown field, autocomplete field,
 | `ACDDashedBorder` | Wraps any widget with a dashed/dotted border, including custom-path outlines. |
 | `ACDStepper` | Horizontal wizard or vertical timeline step-progress indicator. |
 | `ACDStepperListView<T>` / `ACDStepperItemData<T>` | Scrollable timeline list — avatar/marker + connector line + content per row. |
+| `ACDSwitch` / `ACDSwitch.material()` / `ACDSwitch.ios()` | Fully customizable toggle switch, with ready-made platform-styled presets. |
+| `ACDRatingBar` | Tap/drag rating bar — half-star, continuous precision, custom `itemBuilder`, glow, and pop animation. |
+| `ACDMotion` / `ACDMotionSequence` | Entrance/exit/rest/tap animation wrapper for any widget, and a chained-step sequence of them. |
+| `ACDAnimatedText` / `ACDAnimatedTextSequence` | Per-character staggered text animation, and a chained-step sequence of them. |
 | `.autoDismissAfter` | Close automatically after a duration. |
 | `.gravity` | Where the dialog appears (`ACDGravity`: left, top, bottom, right, center, corners...). |
 | `.animation` | How it appears (`ACDAnimation`: fade, scale, bounce, rotate, slide...). |
