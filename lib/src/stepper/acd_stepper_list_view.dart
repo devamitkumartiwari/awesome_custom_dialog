@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'acd_dash_path.dart';
+import '../dashed/acd_dash_path.dart';
 import 'acd_step_status.dart';
 
 /// One row's worth of data for [ACDStepperListView].

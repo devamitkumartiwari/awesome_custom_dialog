@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart' show PointerExitEvent, PointerHoverEvent;
 import 'package:flutter/material.dart';
 
-import 'acd_pop_animation.dart';
+import '../motion/acd_pop_animation.dart';
 import 'acd_rating_icon_style.dart';
 import 'acd_rating_interaction_mode.dart';
 import 'acd_rating_item_status.dart';

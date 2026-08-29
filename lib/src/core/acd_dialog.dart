@@ -8,8 +8,8 @@ import 'acd_content_type.dart';
 import 'acd_gravity.dart';
 import 'acd_overlay_transition.dart';
 import 'acd_presenter.dart';
-import 'acd_snackbar_content.dart';
-import 'acd_toast_length.dart';
+import '../toast_snackbar/acd_snackbar_content.dart';
+import '../toast_snackbar/acd_toast_length.dart';
 
 /// A fluent, chainable builder for dialogs, toasts, and snackbars.
 ///

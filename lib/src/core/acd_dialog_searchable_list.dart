@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'acd_dialog.dart';
-import 'acd_searchable_list_tile.dart';
+import '../list_tile/acd_searchable_list_tile.dart';
 
 /// Adds `searchableList()` and `multiSearchableList()` to [ACDDialog] for a
 /// filterable, generic list — a single or multi-select picker with local

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'acd_dash_path.dart';
+import '../dashed/acd_dash_path.dart';
 import 'acd_dotted_line_position.dart';
 import 'acd_dotted_shape.dart';
 

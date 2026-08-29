@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import 'acd_dialog.dart';
-import 'acd_dialog_searchable_list.dart';
+import '../core/acd_dialog.dart';
+import '../core/acd_dialog_searchable_list.dart';
 import 'acd_dropdown_mode.dart';
-import 'acd_gravity.dart';
-import 'acd_searchable_list_tile.dart';
+import '../core/acd_gravity.dart';
+import '../list_tile/acd_searchable_list_tile.dart';
 
 /// A searchable dropdown [FormField] — the inline, `Form`-compatible field
 /// missing from `ACDDialog.searchableList()`. Tapping it opens the same

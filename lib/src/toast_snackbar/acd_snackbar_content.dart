@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'acd_content_type.dart';
+import '../core/acd_content_type.dart';
 
 // ── ACDSnackbarContent ────────────────────────────────────────────────────────
 // FEAT-16: awesome_snackbar_content parity. Standalone widget — usable

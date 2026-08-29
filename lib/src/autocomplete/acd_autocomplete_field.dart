@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'acd_search_state.dart';
+import '../list_tile/acd_search_state.dart';
 
 /// A generic, dependency-free typeahead text field.
 ///

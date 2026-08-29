@@ -1,7 +1,7 @@
 import 'dart:ui';
 
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
-import 'package:awesome_custom_dialog/src/acd_dash_path.dart';
+import 'package:awesome_custom_dialog/src/dashed/acd_dash_path.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
