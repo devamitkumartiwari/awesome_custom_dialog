@@ -1,5 +1,6 @@
 library awesome_custom_dialog_example;
 
+import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
 import 'package:flutter/material.dart';
 
 import 'home_screen.dart';
@@ -26,6 +27,11 @@ class MyApp extends StatelessWidget {
           theme: AppTheme.light(),
           darkTheme: AppTheme.dark(),
           themeMode: mode,
+          // Gives toasts their own dedicated Overlay, independent of this
+          // app's Navigator — see ACDToastLayer's doc comment for why that
+          // matters (it's optional; .toast()/.snackbar() work without it
+          // too, falling back to the nearest ambient Overlay).
+          builder: (context, child) => ACDToastLayer(child: child!),
           home: const HomeScreen(),
         );
       },

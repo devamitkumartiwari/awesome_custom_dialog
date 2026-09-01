@@ -10,7 +10,7 @@ extension ACDDialogText on ACDDialog {
     String? text,
     Color? color,
     double? fontSize,
-    Alignment? alignment,
+    AlignmentGeometry? alignment,
     TextAlign? textAlign,
     int? maxLines,
     TextDirection? textDirection,
@@ -27,7 +27,10 @@ extension ACDDialogText on ACDDialog {
       Padding(
         padding: padding ?? EdgeInsets.zero,
         child: Align(
-          alignment: alignment ?? Alignment.centerLeft,
+          // AlignmentDirectional resolves against ambient Directionality,
+          // so plain-LTR usage is unchanged while RTL apps get the text
+          // starting on the correct visual side without extra wiring.
+          alignment: alignment ?? AlignmentDirectional.centerStart,
           child: Text(
             text ?? '',
             textAlign: textAlign,

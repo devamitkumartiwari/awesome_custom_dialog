@@ -3,13 +3,12 @@ import 'package:flutter/material.dart';
 import '../core/acd_content_type.dart';
 
 // ── ACDSnackbarContent ────────────────────────────────────────────────────────
-// FEAT-16: awesome_snackbar_content parity. Standalone widget — usable
-// directly inside a real SnackBar/ScaffoldMessenger/MaterialBanner exactly
-// like the source package, or via the ACDDialog.snackbar() convenience
-// factory (see acd_dialog.dart). The source package renders its icon bubble
-// and decorative corner "splash" with bundled SVG assets; this package stays
-// dependency-free (no flutter_svg/asset pipeline), so both are reproduced
-// with plain Flutter primitives (Icon + CustomPaint) instead.
+// FEAT-16: standalone widget — usable directly inside a real
+// SnackBar/ScaffoldMessenger/MaterialBanner, or via the ACDDialog.snackbar()
+// convenience factory (see acd_dialog.dart). The icon bubble and decorative
+// corner "splash" are drawn with plain Flutter primitives (Icon + CustomPaint)
+// rather than bundled image assets, keeping the package dependency-free (no
+// flutter_svg/asset pipeline).
 
 /// A colorful success/failure/warning/help snackbar banner. Use it directly
 /// inside a Flutter `SnackBar`/`ScaffoldMessenger`/`MaterialBanner`, or via
@@ -161,7 +160,10 @@ class ACDSnackbarContent extends StatelessWidget {
             // Title/close row + message
             Positioned.fill(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(70, 5, 12, 5),
+                // BUG FIX: previously hardcoded fromLTRB, which reserved the
+                // icon-bubble gutter on the physical-left even under RTL —
+                // half-mirrored alongside the splash's Transform.flip above.
+                padding: EdgeInsetsDirectional.fromSTEB(70, 5, 12, 5),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -209,8 +211,12 @@ class ACDSnackbarContent extends StatelessWidget {
               ),
             ),
             // Icon bubble (back.svg + type-icon stand-in)
-            Positioned(
-              left: 16,
+            // BUG FIX: previously hardcoded to the physical-left, so it
+            // stayed put while the splash mirrored under RTL — now uses
+            // Positioned.directional so both move together.
+            Positioned.directional(
+              textDirection: Directionality.of(context),
+              start: 16,
               top: -6,
               child: Container(
                 width: 48,

@@ -8,7 +8,9 @@ import 'screens/customization/customization_hub_screen.dart';
 import 'screens/dashed/dashed_hub_screen.dart';
 import 'screens/dropdown/dropdown_hub_screen.dart';
 import 'screens/inputs_screen.dart';
+import 'screens/loaders/loaders_screen.dart';
 import 'screens/motion/motion_hub_screen.dart';
+import 'screens/pin_field/pin_field_screen.dart';
 import 'screens/positioning_screen.dart';
 import 'screens/presets_screen.dart';
 import 'screens/rating_bar/rating_bar_hub_screen.dart';
@@ -17,7 +19,7 @@ import 'screens/slide_action/slide_action_hub_screen.dart';
 import 'screens/snackbar_screen.dart';
 import 'screens/stepper/stepper_hub_screen.dart';
 import 'screens/switch/switch_hub_screen.dart';
-import 'screens/toast_screen.dart';
+import 'screens/toast/toast_screen.dart';
 import 'screens/animations_screen.dart';
 import 'theme/app_theme.dart';
 import 'widgets/showcase_widgets.dart';
@@ -44,6 +46,47 @@ const String _dialogsGroup = 'Dialogs & Feedback';
 const String _formsGroup = 'Forms & Inputs';
 const String _controlsGroup = 'Interactive Controls';
 const String _decorationGroup = 'Decoration & Motion';
+
+class _GroupInfo {
+  const _GroupInfo({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+}
+
+const List<_GroupInfo> _groupInfos = [
+  _GroupInfo(
+    title: _dialogsGroup,
+    subtitle: 'Dialogs, presets, toasts & snackbars',
+    icon: Icons.chat_bubble_outline,
+    color: Colors.teal,
+  ),
+  _GroupInfo(
+    title: _formsGroup,
+    subtitle: 'Text fields, lists, dropdowns & autocomplete',
+    icon: Icons.edit_note,
+    color: Colors.purple,
+  ),
+  _GroupInfo(
+    title: _controlsGroup,
+    subtitle: 'Buttons, switches, sliders & indicators',
+    icon: Icons.touch_app_outlined,
+    color: Colors.indigo,
+  ),
+  _GroupInfo(
+    title: _decorationGroup,
+    subtitle: 'Borders, steppers, animations & motion',
+    icon: Icons.auto_awesome_outlined,
+    color: Colors.pink,
+  ),
+];
 
 final List<_Category> _categories = [
   _Category(
@@ -135,6 +178,22 @@ final List<_Category> _categories = [
     builder: (_) => const RatingBarHubScreen(),
   ),
   _Category(
+    title: 'Percent & Loading Indicators',
+    subtitle: 'Linear, circular, and multi-segment progress',
+    icon: Icons.donut_large_outlined,
+    color: Colors.blue,
+    group: _controlsGroup,
+    builder: (_) => const LoadersScreen(),
+  ),
+  _Category(
+    title: 'Pin / OTP Field',
+    subtitle: 'Single-TextField-driven PIN input, Form-ready',
+    icon: Icons.password_outlined,
+    color: Colors.deepPurple,
+    group: _formsGroup,
+    builder: (_) => const PinFieldScreen(),
+  ),
+  _Category(
     title: 'Dashed & Dotted',
     subtitle: 'Dashed lines, box decoration, and border wrapper',
     icon: Icons.border_style,
@@ -184,34 +243,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _searchController = TextEditingController();
-  String _query = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _searchController.addListener(() {
-      setState(() => _query = _searchController.text.trim().toLowerCase());
-    });
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  List<_Category> get _filtered {
-    if (_query.isEmpty) return _categories;
-    return _categories
-        .where(
-          (c) =>
-              c.title.toLowerCase().contains(_query) ||
-              c.subtitle.toLowerCase().contains(_query),
-        )
-        .toList();
-  }
-
   void _cycleTheme() {
     final current = themeModeNotifier.value;
     themeModeNotifier.value = switch (current) {
@@ -232,13 +263,6 @@ class _HomeScreenState extends State<HomeScreen> {
     ACDDialog.init(context);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final filtered = _filtered;
-    final searching = _query.isNotEmpty;
-
-    final Map<String, List<_Category>> grouped = {};
-    for (final c in filtered) {
-      grouped.putIfAbsent(c.group, () => []).add(c);
-    }
 
     return Scaffold(
       body: CustomScrollView(
@@ -297,118 +321,70 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'A chainable, zero-dependency toolkit of dialogs, form '
-                    'fields, and interactive widgets for Flutter.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
                   const Wrap(
                     spacing: AppSpacing.sm,
                     runSpacing: AppSpacing.sm,
                     children: [
                       Chip(
                         avatar: Icon(Icons.widgets_outlined, size: 16),
-                        label: Text('16+ features'),
-                      ),
-                      Chip(
-                        avatar: Icon(Icons.block_flipped, size: 16),
-                        label: Text('0 dependencies'),
-                      ),
-                      Chip(
-                        avatar: Icon(Icons.palette_outlined, size: 16),
-                        label: Text('Material 3'),
+                        label: Text('18+ features'),
                       ),
                     ],
                   ),
                   const SizedBox(height: AppSpacing.lg),
-                  TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Search features…',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: searching
-                          ? IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () => _searchController.clear(),
-                            )
-                          : null,
-                    ),
-                  ),
-                  if (!searching) ...[
-                    const SizedBox(height: AppSpacing.lg),
-                    CategoryCard(
-                      title: 'Customization Showcase',
-                      subtitle:
-                          'Colors, gradients, shapes, elevation & icons — live',
-                      icon: Icons.auto_fix_high_rounded,
-                      color: scheme.primary,
-                      featured: true,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const CustomizationHubScreen(),
-                        ),
+                  CategoryCard(
+                    title: 'Customization Showcase',
+                    subtitle:
+                        'Colors, gradients, shapes, elevation & icons — live',
+                    icon: Icons.auto_fix_high_rounded,
+                    color: scheme.primary,
+                    featured: true,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const CustomizationHubScreen(),
                       ),
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),
           ),
-          if (searching)
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) => Padding(
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final _GroupInfo info = _groupInfos[index];
+                  final int count =
+                      _categories.where((c) => c.group == info.title).length;
+                  return Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                    child: _openCard(context, filtered[index]),
-                  ),
-                  childCount: filtered.length,
-                ),
-              ),
-            )
-          else
-            for (final group in grouped.entries)
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.md,
-                  AppSpacing.lg,
-                  0,
-                ),
-                sliver: SliverMainAxisGroup(
-                  slivers: [
-                    SliverToBoxAdapter(child: sectionHeader(group.key)),
-                    SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) => Padding(
-                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                          child: _openCard(context, group.value[index]),
+                    child: CategoryCard(
+                      title: info.title,
+                      subtitle: '${info.subtitle} · $count features',
+                      icon: info.icon,
+                      color: info.color,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => _GroupScreen(
+                            title: info.title,
+                            color: info.color,
+                            categories: _categories
+                                .where((c) => c.group == info.title)
+                                .toList(),
+                          ),
                         ),
-                        childCount: group.value.length,
                       ),
                     ),
-                  ],
-                ),
+                  );
+                },
+                childCount: _groupInfos.length,
               ),
+            ),
+          ),
           const SliverPadding(padding: EdgeInsets.only(bottom: AppSpacing.xl)),
         ],
       ),
-    );
-  }
-
-  Widget _openCard(BuildContext context, _Category category) {
-    return CategoryCard(
-      title: category.title,
-      subtitle: category.subtitle,
-      icon: category.icon,
-      color: category.color,
-      onTap: () => Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: category.builder)),
     );
   }
 
@@ -431,7 +407,7 @@ class _HomeScreenState extends State<HomeScreen> {
       )
       ..text(
         padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-        text: 'v1.4.0 • MIT License',
+        text: 'v1.5.0 • MIT License',
         color: Colors.black38,
         alignment: Alignment.center,
       )
@@ -443,5 +419,45 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(12),
       )
       ..show();
+  }
+}
+
+/// Lists every feature category within one home-screen group (e.g.
+/// "Interactive Controls"). Tapping a card opens that feature's own screen,
+/// which shows all of its available options.
+class _GroupScreen extends StatelessWidget {
+  const _GroupScreen({
+    required this.title,
+    required this.color,
+    required this.categories,
+  });
+
+  final String title;
+  final Color color;
+  final List<_Category> categories;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+          title: Text(title), backgroundColor: color.withValues(alpha: 0.08)),
+      body: ListView.separated(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        itemCount: categories.length,
+        separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+        itemBuilder: (context, index) {
+          final _Category category = categories[index];
+          return CategoryCard(
+            title: category.title,
+            subtitle: category.subtitle,
+            icon: category.icon,
+            color: category.color,
+            onTap: () => Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: category.builder)),
+          );
+        },
+      ),
+    );
   }
 }

@@ -1,6 +1,6 @@
 # awesome_custom_dialog
 
-A simple, flexible way to show dialogs, toasts, snackbars, autocomplete fields, slide-to-confirm actions, switches, rating bars, motion/animated text, dashed/dotted decorations, and steppers in Flutter — all with one easy-to-chain API. No extra packages needed.
+A simple, flexible way to show dialogs, toasts, snackbars, autocomplete fields, slide-to-confirm actions, switches, rating bars, motion/animated text, dashed/dotted decorations, steppers, percent/loading indicators, and PIN/OTP fields in Flutter — all with one easy-to-chain API. No extra packages needed.
 
 [![pub package](https://img.shields.io/pub/v/awesome_custom_dialog.svg)](https://pub.dev/packages/awesome_custom_dialog)
 [![license](https://img.shields.io/github/license/devamitkumartiwari/awesome_custom_dialog.svg)](https://github.com/devamitkumartiwari/awesome_custom_dialog/blob/master/LICENSE)
@@ -25,6 +25,8 @@ A simple, flexible way to show dialogs, toasts, snackbars, autocomplete fields, 
   12. [Switch](#12-switch)
   13. [Rating Bar](#13-rating-bar)
   14. [Motion & Animated Text](#14-motion--animated-text)
+  15. [Percent & Loading Indicators](#15-percent--loading-indicators)
+  16. [Pin / OTP Field](#16-pin--otp-field)
 - [🍞 Toast](#-toast)
 - [🍫 Snackbar](#-snackbar)
 - [🎨 Customizing Everything](#-customizing-everything)
@@ -42,7 +44,7 @@ Add this to your package's `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  awesome_custom_dialog: ^1.4.0
+  awesome_custom_dialog: ^1.5.0
 ```
 
 ---
@@ -392,17 +394,64 @@ Flip `visible` to `false` to play `exitEffect` (defaults to `effect` reversed) i
 
 ---
 
+### 15. Percent & Loading Indicators
+
+`ACDLinearPercentIndicator` and `ACDCircularPercentIndicator` are fully customizable, dependency-free progress indicators:
+```dart
+ACDLinearPercentIndicator(
+  initialValue: 0.4,
+  progressColor: Colors.blue,
+  showPercentageText: true, // "40%", font size auto-scaled to lineHeight
+)
+
+ACDCircularPercentIndicator(
+  radius: 60,
+  initialValue: 0.7,
+  progressColor: Colors.green,
+  fillMode: ACDLoaderFillMode.pie, // or the default .ring
+  showPercentageText: true, // "70%", font size auto-scaled to radius
+)
+```
+Both work controlled (`value`), uncontrolled (`initialValue`), or driven by a `ValueNotifier<double>` `controller` — perfect for a download/upload progress stream. `ACDLinearPercentIndicator` fills its parent's width responsively by default; pass `width` for a fixed size. `ACDCircularPercentIndicator` supports `arcType` (`full`/`half`/`fullReversed`) for quick gauge shapes, or raw `startAngle`/`sweepAngle` for anything custom. Both animate every value change incrementally from the current value (never restarting from `0`), and support `direction: ACDLoaderDirection.reverse`, gradients (`linearGradient`/`circularGradient`, plus a genuinely working `backgroundGradient`), independent `progressBorderColor`/`backgroundBorderColor` outlines, a `boxShadow`, and `strokeCap`/`barRadius` for corner rounding — set either alone, they don't require each other. Pass your own `center` instead of `showPercentageText` for anything beyond a plain percentage label.
+
+For multiple independent segments in one bar:
+```dart
+ACDMultiSegmentLinearIndicator(
+  segments: [
+    ACDLoaderSegment(key: 'download', percent: 0.6, color: Colors.blue),
+    ACDLoaderSegment(key: 'verify', percent: 0.2, color: Colors.orange),
+  ],
+)
+```
+`segments` is diffed by `ACDLoaderSegment.key`, so adding, removing, or reordering segments at runtime — even mid-animation — is always safe.
+
+---
+
+### 16. Pin / OTP Field
+
+`ACDPinField` is a dependency-free PIN/OTP input, built around one real (invisible) `TextField` so selection, cursor, IME, paste, and autofill are all Flutter's own native behavior — not reimplemented:
+```dart
+ACDPinField(
+  length: 6,
+  onCompleted: (pin) => debugPrint('Entered $pin'),
+  validator: (pin) => pin != null && pin.length == 6 ? null : 'Enter all 6 digits',
+)
+```
+Drop it straight into a `Form` — it's a real `FormField<String>`, so `validator`/`onSaved`/`autovalidateMode` all work as expected, and a validation error shows correctly on the very first interaction. Style each state independently with `pinTheme`/`focusedPinTheme`/`submittedPinTheme`/`errorPinTheme`/`disabledPinTheme`, pick a `pinAnimationType` (`scale`/`fade`/`slide`/`rotation`) for the per-digit entry animation, and use `obscureText` (with an optional `obscureRevealDuration` to briefly show each digit before masking it) for a passcode-style field. OTP autofill works out of the box via `AutofillHints.oneTimeCode` — no extra plugin required.
+
+---
+
 ## 🍞 Toast
 
-A small message that appears briefly and disappears on its own — like a native Android toast, but on any platform. It never blocks taps on the rest of your app.
+A small message that appears briefly and disappears on its own — like a native Android toast, but on any platform. It never blocks taps on the rest of your app, stacks multiple toasts cleanly, and is fully customizable: colors, gradients, borders, shapes, corner radius, styles, animations, progress bar, drag-to-dismiss, and more.
 
 ```dart
 ACDDialog.toast(
   context: context,
   message: "Copied to clipboard",
-  length: ACDToastLength.long,   // short or long
-  showCloseButton: true,          // adds a small X to dismiss early
-  dismissOnTap: true,             // tap the toast to dismiss it
+  length: ACDToastLength.long,                       // short or long
+  closeButtonMode: ACDToastCloseButtonMode.always,   // never / always / onHover
+  dismissOnTap: true,                                 // tap the toast to dismiss it
   fontFamily: "Roboto",
 )..show();
 
@@ -410,7 +459,58 @@ ACDDialog.toast(
 ACDDialog.cancelToast();
 ```
 
-Want to show several toasts one after another? Reuse the built-in queue:
+Optionally wrap your app once to give toasts a dedicated `Overlay`, independent of your app's own navigation stack (recommended, but not required — `.toast()`/`.snackbar()` fall back to the nearest ambient `Overlay` otherwise):
+
+```dart
+MaterialApp(
+  builder: (context, child) => ACDToastLayer(child: child!),
+  home: const HomeScreen(),
+)
+```
+
+**Stacking multiple toasts** — cap how many show at once with `maxVisible`, and choose what happens to the rest via `overflowPolicy` (`queue`, the default, holds extras back; `dropOldest` bumps the oldest to make room; `unlimited` ignores the cap):
+
+```dart
+for (final msg in ["Step 1", "Step 2", "Step 3", "Step 4"]) {
+  ACDDialog.toast(
+    context: context,
+    message: msg,
+    cancelPrevious: false,
+    maxVisible: 3,
+    overflowPolicy: ACDToastOverflowPolicy.queue,
+  ).show();
+}
+```
+
+**Styles and content types** — `style` picks a visual variant (`filled`, `flat`, `flatColored`, `minimal`, `simple`), `contentType` reuses the same success/failure/warning/help presets as [Snackbar](#-snackbar):
+
+```dart
+ACDDialog.toast(
+  context: context,
+  message: "Saved successfully",
+  contentType: ACDContentType.success,
+  style: ACDToastStyle.flatColored,
+)..show();
+```
+
+**Progress bar, pause-on-hover, drag-to-dismiss:**
+
+```dart
+ACDDialog.toast(
+  context: context,
+  message: "Hover to pause the countdown",
+  showProgressBar: true,
+  pauseOnHover: true,   // desktop/web — a no-op on touch-only platforms
+  dragToDismiss: true,  // swipe the toast away
+  showDuration: const Duration(seconds: 6),
+)..show();
+```
+
+**Full appearance control** — beyond `backgroundColor`/`borderRadius`, every toast also accepts `backgroundGradient`, `border`/`borderColor`/`borderWidth`, `boxShadow`, `cornerRadius` (per-corner), and a `shape` (`ShapeBorder`) escape hatch for pill/notched cards — plus `margin` (inset from the screen edge), `contentPadding` (inner spacing), and `stackSpacing` (gap between stacked toasts), kept as three distinct knobs on purpose. For anything else, `customBuilder` fully replaces the card.
+
+**Management API** beyond a single call site — `ACDToastManager.dismissAll()`/`.dismissById(id)`/`.dismissFirst()`/`.dismissLast()`/`.findById(id)`/`.activeCount()`/`.activeToasts()`, plus `ACDToastManager.setDefaults(ACDToastConfig(...))` for app-wide defaults with per-call overrides.
+
+Want to show several toasts one after another instead of stacking them? Reuse the built-in queue:
 
 ```dart
 for (final msg in ["Step 1", "Step 2", "Step 3"]) {
@@ -420,7 +520,7 @@ for (final msg in ["Step 1", "Step 2", "Step 3"]) {
 }
 ```
 
-You can position a toast anywhere using `gravity` — top, bottom, center, or any corner (see `ACDGravity` below).
+You can position a toast anywhere using `gravity` — top, bottom, center, or any corner (see `ACDGravity` below); every position automatically mirrors under RTL directionality.
 
 ---
 
@@ -479,6 +579,7 @@ Every part of every dialog, toast, snackbar, dropdown field, autocomplete field,
     ..show();
   ```
 - **Snackbar**: `ACDSnackbarContent`/`ACDDialog.snackbar()` accept `gradient` (overriding the flat background color), `elevation`/`boxShadow`, and `titleFontSize`/`titleFontWeight`/`titleFontFamily`/`messageFontSize`/`messageFontWeight`/`messageFontFamily` shortcuts alongside the existing full `titleTextStyle`/`messageTextStyle`.
+- **Toast**: `ACDDialog.toast()` accepts `style` (`filled`/`flat`/`flatColored`/`minimal`/`simple`), `contentType`, `backgroundGradient`, `border`/`borderColor`/`borderWidth`, `boxShadow`, `cornerRadius`, and a full `shape` (`ShapeBorder`) escape hatch, plus a `customBuilder` that replaces the card entirely — on top of the existing `backgroundColor`/`textColor`/`fontSize`/`fontFamily`/`textStyle`/`borderRadius`. `margin` (outer inset), `contentPadding` (inner spacing), and `stackSpacing` (gap between stacked toasts) are three deliberately distinct knobs.
 - **Lists**: `listOfACDListTile`/`listOfACDRadioButton`/`listOfACDCheckbox`/`searchableList` all accept a `borderRadius` for rounded rows; `ACDRadioItem`/`ACDCheckboxItem` accept `leading`/`trailing` widgets (previously only the plain list variant could); the searchable list's magnifying-glass icon is overridable via `searchIcon`.
 - **`acdTextField`**: accepts `prefixIcon`/`suffixIcon`, on top of the existing fill/border/label styling.
 - **Dropdown fields**: `ACDDropdownField`/`ACDMultiDropdownField` take a standard `InputDecoration` for the closed-state field (label, hint, border, fill, icons — same as `TextFormField`), plus their own `itemTextColor`/`itemFontSize`/`itemFontWeight`/`itemFontFamily`/`itemStyle`, `tileColor`, and `searchFillColor`/`searchBorderColor`/`searchBorderRadius` for the popup — see the styling example in [Dropdown Field](#7-dropdown-field) above.
@@ -486,6 +587,8 @@ Every part of every dialog, toast, snackbar, dropdown field, autocomplete field,
 - **Dashed/dotted/border**: `ACDDashedLine`, `ACDDottedDecoration`, and `ACDDashedBorder` all accept a `gradient` (overriding the flat `color`) and `roundedCaps` (turns square dash segments into rounded — what actually makes a dotted pattern read as *dots*).
 - **Slide to confirm**: `ACDSlideAction` accepts `activeThumbColor`/`inactiveThumbColor` and `activeTrackColor`/`inactiveTrackColor` for distinct idle-vs-dragging looks, with matching `activeThumbGradient`/`inactiveThumbGradient`/`activeTrackGradient`/`inactiveTrackGradient` gradient variants, plus `elevationThumb`/`elevationTrack`, `trackPadding`, `thumbBorderRadius`, and a `showWaveTrail` animated trail.
 - **Stepper**: `ACDStepper` accepts per-status `finishedStepGradient`/`activeStepGradient`/`upcomingStepGradient`, `markerElevation`/`markerBoxShadow`, and an implicit `animationDuration`/`animationCurve` transition whenever `activeStep` changes; `ACDStepperListView` has the matching `avatarGradient`/`avatarElevation`/`animationDuration`/`animationCurve`.
+- **Percent & loading indicators**: `progressColor`/`linearGradient`/`circularGradient` (defaulting to the theme's primary color, not an invisible same-as-background gray) plus a genuinely working `backgroundGradient`, independent `progressBorderColor`/`backgroundBorderColor` outlines with a `borderWidth`, a `boxShadow`, `strokeCap`, `barRadius`, `direction` (reverse fill), and `fillMode`/`arcType` for the circular indicator's ring/pie and gauge shapes; `ACDMultiSegmentLinearIndicator` colors/borders/animates each `ACDLoaderSegment` independently (including its own `backgroundColor`/`borderColor` overrides), plus a customizable `stripeColor` for the marching-stripe effect. All three loaders accept `padding` (inside) and `margin` (outside).
+- **Pin / OTP field**: `ACDPinField` accepts per-state `pinTheme`/`focusedPinTheme`/`submittedPinTheme`/`errorPinTheme`/`disabledPinTheme` (each an `ACDPinTheme` with direct `color`/`gradient`/`borderColor`/`borderWidth`/`borderRadius`/`shape` (rectangle or circle)/`boxShadow` shortcuts, plus a full `decoration: BoxDecoration` escape hatch for anything beyond them), a `pinAnimationType` per-digit entry animation, and `obscureText`/`obscureRevealDuration`/`obscuringWidgetBuilder` for masked codes. Focused and error states already look distinct out of the box — no theme required to get sensible visual feedback. `ACDPinField` itself also takes a top-level `padding`/`margin` around the whole field, separate from each `ACDPinTheme`'s own per-cell `margin`/`padding`.
 - **Gradients & elevation, consistently**: as a rule across the whole package, any widget with a background color also accepts a matching `Gradient?` override, and most now expose an `elevation`/`boxShadow` pair — not just the dialog core.
 - **Corners**: `borderRadius` is available on dialogs, images, text fields, toasts, snackbars, lists, buttons, and every new widget above. For a dialog that only wants *some* corners rounded (like a side panel sitting flush against an edge), pass a full `cornerRadius` instead:
   ```dart
@@ -520,7 +623,9 @@ Every part of every dialog, toast, snackbar, dropdown field, autocomplete field,
 - **Motion & animated text**: `ACDMotion`/`ACDMotionSequence` — an entrance/exit/rest/tap animation wrapper for any widget — and `ACDAnimatedText`/`ACDAnimatedTextSequence` for per-character staggered text, both sharing one `ACDMotionEffect` vocabulary.
 - **Dashed & dotted decoration**: `ACDDashedLine`, `ACDDottedDecoration` (a drop-in `Decoration`), and `ACDDashedBorder` (wraps any widget, including custom-path outlines).
 - **Stepper**: `ACDStepper` — a horizontal wizard or vertical timeline progress indicator — and `ACDStepperListView<T>` for a scrollable timeline list.
-- **Toast messages**: A tiny, auto-dismissing message that never blocks the rest of your screen — with length, close button, and cancel support.
+- **Percent & loading indicators**: `ACDLinearPercentIndicator`/`ACDCircularPercentIndicator`/`ACDMultiSegmentLinearIndicator` — responsive, gradient- and direction-aware progress bars/rings/pies with safe runtime-diffed segments.
+- **Pin / OTP field**: `ACDPinField` — a single-`TextField`-driven PIN/OTP input with per-state theming, `Form` integration, and built-in OTP autofill.
+- **Toast messages**: A tiny, auto-dismissing message that never blocks the rest of your screen — with stacking (`maxVisible`/`overflowPolicy`), style variants, a progress bar, pause-on-hover, drag-to-dismiss, and a full management API (`ACDToastManager`).
 - **Snackbar messages**: Colorful success/failure/warning/help banners, usable on their own or through the dialog API.
 - **Style everything**: Colors, gradients, fonts, padding, corner radius, elevation/shadow, and icons are all customizable, everywhere — with sensible defaults if you change nothing.
 - **No extra dependencies**: Just Flutter itself.
@@ -554,10 +659,16 @@ Every part of every dialog, toast, snackbar, dropdown field, autocomplete field,
 | `ACDRatingBar` | Tap/drag rating bar — half-star, continuous precision, custom `itemBuilder`, glow, and pop animation. |
 | `ACDMotion` / `ACDMotionSequence` | Entrance/exit/rest/tap animation wrapper for any widget, and a chained-step sequence of them. |
 | `ACDAnimatedText` / `ACDAnimatedTextSequence` | Per-character staggered text animation, and a chained-step sequence of them. |
+| `ACDLinearPercentIndicator` / `ACDCircularPercentIndicator` | Responsive linear bar / circular ring-or-pie progress indicator, gradient- and direction-aware. |
+| `ACDMultiSegmentLinearIndicator` / `ACDLoaderSegment` | Multiple independently-colored, independently-animated progress segments in one bar, safely diffable at runtime. |
+| `ACDPinField` | PIN/OTP input built on one real `TextField`, with per-state theming and `Form` integration. |
 | `.autoDismissAfter` | Close automatically after a duration. |
 | `.gravity` | Where the dialog appears (`ACDGravity`: left, top, bottom, right, center, corners...). |
 | `.animation` | How it appears (`ACDAnimation`: fade, scale, bounce, rotate, slide...). |
-| `ACDDialog.toast()` / `ACDDialog.cancelToast()` | Show/cancel a toast message. |
+| `ACDDialog.toast()` / `ACDDialog.cancelToast()` | Show/cancel a toast message — stacking, styles, progress bar, drag-to-dismiss. |
+| `ACDToastLayer` | Optional root wrapper giving toasts their own dedicated `Overlay`. |
+| `ACDToastManager` | Toast management: `dismissAll()`/`dismissById()`/`dismissFirst()`/`dismissLast()`/`findById()`/`activeToasts()`/`setDefaults()`. |
+| `ACDToastStyle` / `ACDToastConfig` | Toast visual variants (`filled`/`flat`/`flatColored`/`minimal`/`simple`) and the full resolved-parameter config. |
 | `ACDDialog.snackbar()` / `ACDSnackbarContent` | Show a snackbar message. |
 | `ACDDialogQueue.enqueue()` | Show dialogs (or toasts) one after another, without overlapping. |
 
@@ -565,7 +676,7 @@ Every part of every dialog, toast, snackbar, dropdown field, autocomplete field,
 
 ## ⚙️ A Few More Things
 
-- **Right-to-left layouts**: set `..textDirection = TextDirection.rtl` for RTL apps — `ACDSlideAction` also mirrors its own drag direction automatically under RTL.
+- **Right-to-left layouts**: gravity-based positioning, margins, and slide animations (dialogs, toasts, snackbars) all mirror automatically under ambient RTL `Directionality` — set `..textDirection = TextDirection.rtl` explicitly only to override that. `ACDSlideAction`, `ACDSwitch`, `ACDRatingBar`, and `ACDAnimatedText` mirror their own drag direction/fill/stagger order under RTL too. `ACDPinField`'s digit-entry order stays left-to-right by default regardless of ambient direction (the conventional PIN/OTP UX) — pass `textDirection: TextDirection.rtl` explicitly to mirror it. `ACDLinearPercentIndicator`/`ACDCircularPercentIndicator`'s fill direction is a manual `isRTL`/`direction` opt-in, independent of ambient `Directionality` by design (it's a data-visualization choice, not a text-flow one).
 - **Safe area**: top/bottom dialogs automatically avoid notches and system bars; set `..respectSafeArea = true` to force it for any position.
 - **Tapping outside the dialog**: `..barrierDismissible = false` stops taps outside from closing it, and `..onBarrierTap = () {}` lets you run your own logic when the user taps outside.
 - **App theme**: `..useTheme = true` picks up your app's `ThemeData.dialogTheme` background instead of a fixed color.

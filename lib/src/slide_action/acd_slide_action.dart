@@ -768,14 +768,22 @@ class _ACDSlideActionState extends State<ACDSlideAction>
       case ACDSlideActionStatus.dragging:
         icon = widget.thumbIcon == null
             ? const SizedBox.shrink()
-            : Icon(
-                widget.thumbIcon,
-                size: thumbSize * 0.55,
-                color:
-                    ThemeData.estimateBrightnessForColor(color) ==
-                        Brightness.dark
-                    ? Colors.white
-                    : Colors.black87,
+            : Transform.flip(
+                // BUG FIX: the thumb's position/drag direction already
+                // mirror under RTL, but a directional glyph like the
+                // default arrow_forward kept pointing physically right —
+                // flip it to match, same technique ACDSnackbarContent
+                // already uses for its splash graphic.
+                flipX: Directionality.of(context) == TextDirection.rtl,
+                child: Icon(
+                  widget.thumbIcon,
+                  size: thumbSize * 0.55,
+                  color:
+                      ThemeData.estimateBrightnessForColor(color) ==
+                          Brightness.dark
+                      ? Colors.white
+                      : Colors.black87,
+                ),
               );
     }
 

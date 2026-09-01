@@ -26,6 +26,7 @@ class ACD {
   final bool _useRootNavigator; // BUG-03
   final String _barrierLabel; // IMP-08
   final VoidCallback? _onBarrierTap; // FEAT-12
+  final TextDirection _textDirection;
 
   /// Builds and immediately shows a `showGeneralDialog`-based dialog.
   ACD({
@@ -40,6 +41,7 @@ class ACD {
     bool useRootNavigator = true,
     String barrierLabel = 'Dialog',
     VoidCallback? onBarrierTap,
+    TextDirection textDirection = TextDirection.ltr,
   }) : _child = child,
        _context = context,
        _gravity = gravity,
@@ -51,7 +53,8 @@ class ACD {
        _barrierDismissible = onBarrierTap != null ? false : barrierDismissible,
        _useRootNavigator = useRootNavigator,
        _barrierLabel = barrierLabel,
-       _onBarrierTap = onBarrierTap {
+       _onBarrierTap = onBarrierTap,
+       _textDirection = textDirection {
     _show();
   }
 
@@ -109,8 +112,12 @@ class ACD {
     // No gravity animation requested
     if (!_gravityAnimationEnable) return child;
 
+    final ACDGravity? resolvedGravity = _gravity == null
+        ? null
+        : acdResolveGravityForDirection(_gravity, _textDirection);
+
     Offset begin;
-    switch (_gravity) {
+    switch (resolvedGravity) {
       case ACDGravity.top:
       case ACDGravity.leftTop:
       case ACDGravity.rightTop:

@@ -39,8 +39,8 @@ void main() {
       expect(find.text('4:filled'), findsOneWidget);
 
       // An unrelated ancestor rebuild must not reset the rating back to
-      // `initialRating` — the classic upstream regression this design
-      // eliminates by construction.
+      // `initialRating` — a classic "seed value re-read on every rebuild"
+      // bug this design eliminates by construction.
       rebuildParent(() {});
       await tester.pump();
       expect(find.text('4:filled'), findsOneWidget);

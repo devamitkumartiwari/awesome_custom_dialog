@@ -34,10 +34,38 @@ enum ACDGravity {
   spaceEvenly,
 }
 
-// Resolve effective margin based on gravity if none provided
-EdgeInsets acdResolveMarginForGravity(ACDGravity gravity, EdgeInsets margin) {
+// Mirrors left/right-flavored gravities under RTL so `.left`/`.right`/the
+// four corners consistently mean "visual start/end" everywhere gravity is
+// resolved — matching acdColumnCrossAxisAlignment/acdRowAlignment below,
+// which already auto-mirror via start/end. Without this, ACDGravity.left
+// meant "physical left, always" for docking/margin but "visual start" for
+// button-row/column alignment: an internal contradiction under RTL.
+ACDGravity acdResolveGravityForDirection(
+  ACDGravity gravity,
+  TextDirection direction,
+) {
+  if (direction == TextDirection.ltr) return gravity;
+  return switch (gravity) {
+    ACDGravity.left => ACDGravity.right,
+    ACDGravity.right => ACDGravity.left,
+    ACDGravity.leftTop => ACDGravity.rightTop,
+    ACDGravity.rightTop => ACDGravity.leftTop,
+    ACDGravity.leftBottom => ACDGravity.rightBottom,
+    ACDGravity.rightBottom => ACDGravity.leftBottom,
+    _ => gravity,
+  };
+}
+
+// Resolve effective margin based on gravity if none provided. Mirrors
+// left/right-flavored gravities under RTL — see acdResolveGravityForDirection.
+EdgeInsets acdResolveMarginForGravity(
+  ACDGravity gravity,
+  EdgeInsets margin, [
+  TextDirection direction = TextDirection.ltr,
+]) {
   if (margin != EdgeInsets.zero) return margin;
-  switch (gravity) {
+  final ACDGravity g = acdResolveGravityForDirection(gravity, direction);
+  switch (g) {
     case ACDGravity.top:
     case ACDGravity.leftTop:
     case ACDGravity.rightTop:
@@ -60,8 +88,14 @@ EdgeInsets acdResolveMarginForGravity(ACDGravity gravity, EdgeInsets margin) {
   }
 }
 
-Alignment acdGravityToAlignment(ACDGravity g) {
-  switch (g) {
+// Mirrors left/right-flavored gravities under RTL — see
+// acdResolveGravityForDirection.
+Alignment acdGravityToAlignment(
+  ACDGravity g, [
+  TextDirection direction = TextDirection.ltr,
+]) {
+  final ACDGravity resolved = acdResolveGravityForDirection(g, direction);
+  switch (resolved) {
     case ACDGravity.top:
       return Alignment.topCenter;
     case ACDGravity.bottom:

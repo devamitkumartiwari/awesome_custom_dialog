@@ -8,8 +8,8 @@ import 'acd_content_type.dart';
 import 'acd_gravity.dart';
 import 'acd_overlay_transition.dart';
 import 'acd_presenter.dart';
+import '../toast/toast.dart';
 import '../toast_snackbar/acd_snackbar_content.dart';
-import '../toast_snackbar/acd_toast_length.dart';
 
 /// A fluent, chainable builder for dialogs, toasts, and snackbars.
 ///
@@ -125,9 +125,19 @@ class ACDDialog {
   /// instead of [backgroundColor].
   bool useTheme = false;
 
-  /// Text direction for the dialog's content column — set to
-  /// `TextDirection.rtl` for right-to-left layouts.
-  TextDirection textDirection = TextDirection.ltr;
+  TextDirection? _textDirectionOverride;
+
+  /// Text direction for the dialog's content, gravity-based positioning,
+  /// margin, and slide animations. Defaults to the ambient `Directionality`
+  /// (so RTL apps get correctly-mirrored gravity/margin/animation without
+  /// any extra wiring) — set explicitly (e.g. `..textDirection =
+  /// TextDirection.rtl`) to override that for this dialog specifically.
+  TextDirection get textDirection =>
+      _textDirectionOverride ??
+      (context != null ? Directionality.maybeOf(context!) : null) ??
+      TextDirection.ltr;
+
+  set textDirection(TextDirection value) => _textDirectionOverride = value;
 
   // ── Callbacks ─────────────────────────────────────────────────────────────
   /// Called once the dialog has finished appearing.
@@ -152,6 +162,15 @@ class ACDDialog {
   bool _overlayMode = false;
   OverlayEntry? _overlayEntry;
 
+  // ── Toast-mode presentation ──────────────────────────────────────────────
+  // Used by .toast(): delegates presentation/stacking/lifecycle entirely to
+  // ACDToastManager instead of the plain overlay path above, so multiple
+  // toasts can stack, animate out, show a progress bar, etc. See
+  // lib/src/toast/.
+  bool _toastMode = false;
+  ACDToastConfig? _toastConfig;
+  ACDToastController? _toastController;
+
   // ── Static helpers ────────────────────────────────────────────────────────
 
   /// Stores a default `BuildContext` so later `ACDDialog().build()` calls
@@ -168,13 +187,11 @@ class ACDDialog {
     _context = null;
   }
 
-  static ACDDialog? _activeToast;
-
-  /// Dismisses the currently showing toast (if any) — equivalent to
-  /// `Fluttertoast.cancel()`.
+  /// Dismisses every currently showing/queued toast. For finer-grained
+  /// control (dismiss by id, one position only, oldest/newest only), use
+  /// `ACDToastManager` directly.
   static void cancelToast() {
-    _activeToast?.dismiss();
-    _activeToast = null;
+    ACDToastManager.dismissAll();
   }
 
   // ── Builder API ───────────────────────────────────────────────────────────
@@ -195,104 +212,161 @@ class ACDDialog {
     return this;
   }
 
-  /// Creates a small, auto-dismissing toast message — call [show] on the
-  /// result to display it. Presented via a non-blocking overlay by default,
-  /// so it never intercepts taps on the rest of your app (set [blockTouches]
-  /// to restore the old modal-blocking presentation).
+  /// Creates a toast message — call [show] on the result to display it.
+  /// Presented via `ACDToastManager` (a non-blocking overlay by default, so
+  /// it never intercepts taps on the rest of your app — set [blockTouches]
+  /// to restore the old modal-blocking presentation), which also handles
+  /// stacking multiple simultaneous toasts, exit animations, a progress
+  /// bar, pause-on-hover, and drag-to-dismiss. Every parameter here is
+  /// optional and defaults to this factory's original, backward-compatible
+  /// behavior — see `ACDToastConfig`/`ACDToastManager` for the full
+  /// customization surface (styles, shapes, colors, stacking, callbacks)
+  /// and management API (dismiss by id, dismiss all, find by id).
   factory ACDDialog.toast({
     required BuildContext context,
     required String message,
-    // FEAT-15: nullable so precedence between showDuration and length is
-    // unambiguous — explicit showDuration always wins, length is the
-    // Fluttertoast-style convenience, and omitting both keeps the original
-    // 2-second default.
+    // Nullable so precedence between showDuration and length is
+    // unambiguous — explicit showDuration always wins, length is a
+    // convenience shortcut, and omitting both keeps the original 2-second
+    // default. Pass Duration.zero for a sticky toast that only dismisses
+    // manually/via a close button/tap.
     Duration? showDuration,
-    ACDToastLength? length, // FEAT-15: Toast.LENGTH_SHORT/LENGTH_LONG parity
-    ACDGravity gravity = ACDGravity.bottom,
-    Color backgroundColor = const Color(0xDD000000),
-    Color textColor = Colors.white,
-    double fontSize = 14.0,
-    String? fontFamily, // FEAT-15: fontAsset parity
+    ACDToastLength? length,
+    ACDGravity? gravity,
+    Color? backgroundColor,
+    Color? textColor,
+    double? fontSize,
+    String? fontFamily,
     TextStyle? textStyle,
-    double borderRadius = 24.0,
-    EdgeInsets contentPadding = const EdgeInsets.symmetric(
-      horizontal: 16,
-      vertical: 10,
-    ),
-    EdgeInsets margin = const EdgeInsets.symmetric(
-      horizontal: 24,
-      vertical: 32,
-    ),
-    bool cancelPrevious = true, // FEAT-15: Fluttertoast.cancel()-first parity
-    bool showCloseButton = false, // FEAT-15: webShowClose parity
-    IconData closeIcon = Icons.close_rounded,
-    bool dismissOnTap = false, // FEAT-15: FToast(isDismissible:) parity
-    // FEAT-15: fixes a pre-existing bug where the transparent barrier still
-    // fully hit-tests the screen (showGeneralDialog's ModalBarrier is always
+    double? borderRadius,
+    BorderRadius? cornerRadius,
+    EdgeInsets? contentPadding,
+    EdgeInsets? margin,
+    bool? cancelPrevious,
+    @Deprecated('Use closeButtonMode instead.') bool showCloseButton = false,
+    IconData? closeIcon,
+    bool? dismissOnTap,
+    // Fixes a pre-existing bug where the transparent barrier still fully
+    // hit-tests the screen (showGeneralDialog's ModalBarrier is always
     // opaque to hit-testing, regardless of barrierColor/barrierDismissible).
-    // Defaulting to overlay-mode makes the toast never block touches,
-    // matching real Android Toast / FToast(ignorePointer: true) behavior.
-    // Set true only to restore the old modal-blocking presentation.
+    // Defaulting to overlay-mode makes the toast never block touches, like
+    // a native platform toast. Set true only to restore the old
+    // modal-blocking presentation.
     bool blockTouches = false,
+    // ── New: type/style ────────────────────────────────────────────────
+    String? id,
+    ACDContentType? contentType,
+    ACDToastStyle? style,
+    IconData? icon,
+    bool? showIcon,
+    bool? animatedIcon,
+    // ── New: position/stacking ─────────────────────────────────────────
+    int? maxVisible,
+    ACDToastOverflowPolicy? overflowPolicy,
+    bool? dedupeById,
+    double? stackSpacing,
+    Duration? showDelay,
+    bool? useRootNavigator,
+    // ── New: animation ──────────────────────────────────────────────────
+    ACDAnimation? animation,
+    Function(Widget, Animation<double>)? animatedFunc,
+    ACDAnimation? exitAnimation,
+    Function(Widget, Animation<double>)? exitAnimatedFunc,
+    // ── New: timing/progress ────────────────────────────────────────────
+    bool? showProgressBar,
+    bool? progressBarAtTop,
+    bool? pauseOnHover,
+    // ── New: interaction ─────────────────────────────────────────────────
+    bool? dragToDismiss,
+    ACDToastCloseButtonMode? closeButtonMode,
+    bool? blockBackgroundInteraction,
+    List<Widget>? actions,
+    // ── New: appearance ──────────────────────────────────────────────────
+    Gradient? backgroundGradient,
+    Color? borderColor,
+    double? borderWidth,
+    BorderSide? border,
+    ShapeBorder? shape,
+    List<BoxShadow>? boxShadow,
+    Decoration? decoration,
+    double? width,
+    double? height,
+    BoxConstraints? constraints,
+    ACDToastCardBuilder? customBuilder,
+    // ── New: callbacks ───────────────────────────────────────────────────
+    VoidCallback? onTap,
+    VoidCallback? onCloseButtonTap,
+    VoidCallback? onAutoDismiss,
+    VoidCallback? onShown,
   }) {
-    if (cancelPrevious) cancelToast();
+    final Duration? effectiveDuration = showDuration == Duration.zero
+        ? Duration.zero
+        : (showDuration ?? length?.duration);
 
-    final Duration effectiveDuration =
-        showDuration ?? length?.duration ?? const Duration(seconds: 2);
-
-    final dialog = ACDDialog()
-      ..build(context)
-      .._overlayMode = !blockTouches
-      ..barrierColor = Colors.transparent
-      ..barrierDismissible = false
-      ..gravity = gravity
-      ..gravityAnimationEnable = true
-      ..backgroundColor = backgroundColor
-      ..borderRadius = borderRadius
-      ..autoDismissAfter = effectiveDuration
-      ..margin = margin;
-
-    final Widget messageWidget = Text(
-      message,
-      style: TextStyle(
-        color: textColor,
-        fontSize: fontSize,
-        fontFamily: fontFamily,
-      ).merge(textStyle),
-      textAlign: TextAlign.center,
+    final ACDToastConfig config = ACDToastConfig(
+      message: message,
+      id: id,
+      gravity: gravity,
+      contentType: contentType,
+      style: style,
+      icon: icon,
+      showIcon: showIcon,
+      animatedIcon: animatedIcon,
+      backgroundColor: backgroundColor,
+      textColor: textColor,
+      backgroundGradient: backgroundGradient,
+      borderColor: borderColor,
+      borderWidth: borderWidth,
+      border: border,
+      shape: shape,
+      borderRadius: borderRadius,
+      cornerRadius: cornerRadius,
+      boxShadow: boxShadow,
+      decoration: decoration,
+      fontSize: fontSize,
+      fontFamily: fontFamily,
+      textStyle: textStyle,
+      contentPadding: contentPadding,
+      margin: margin,
+      stackSpacing: stackSpacing,
+      width: width,
+      height: height,
+      constraints: constraints,
+      maxVisible: maxVisible,
+      overflowPolicy: overflowPolicy,
+      dedupeById: dedupeById,
+      cancelPrevious: cancelPrevious,
+      animation: animation,
+      animatedFunc: animatedFunc,
+      exitAnimation: exitAnimation,
+      exitAnimatedFunc: exitAnimatedFunc,
+      autoDismissAfter: effectiveDuration,
+      showDelay: showDelay,
+      showProgressBar: showProgressBar,
+      progressBarAtTop: progressBarAtTop,
+      pauseOnHover: pauseOnHover,
+      dragToDismiss: dragToDismiss,
+      dismissOnTap: dismissOnTap,
+      closeButtonMode:
+          closeButtonMode ??
+          // ignore: deprecated_member_use_from_same_package
+          (showCloseButton ? ACDToastCloseButtonMode.always : null),
+      closeIcon: closeIcon,
+      blockBackgroundInteraction:
+          blockBackgroundInteraction ?? (blockTouches ? true : null),
+      useRootNavigator: useRootNavigator,
+      actions: actions,
+      customBuilder: customBuilder,
+      onTap: onTap,
+      onCloseButtonTap: onCloseButtonTap,
+      onAutoDismiss: onAutoDismiss,
+      onShown: onShown,
     );
 
-    Widget content = showCloseButton
-        ? Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(child: messageWidget),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: dialog.dismiss,
-                child: Icon(closeIcon, color: textColor, size: 16),
-              ),
-            ],
-          )
-        : messageWidget;
-
-    if (dismissOnTap) {
-      content = GestureDetector(onTap: dialog.dismiss, child: content);
-    }
-
-    dialog.widget(Padding(padding: contentPadding, child: content));
-
-    // FEAT-15: track + chain dismissCallBack so cancelToast()/a subsequent
-    // .toast() call can find and dismiss this one (same capture pattern
-    // ACDDialogQueue._next() uses).
-    _activeToast = dialog;
-    final VoidCallback? userDismiss = dialog.dismissCallBack;
-    dialog.dismissCallBack = () {
-      userDismiss?.call();
-      if (identical(_activeToast, dialog)) _activeToast = null;
-    };
-
-    return dialog;
+    return ACDDialog()
+      ..build(context)
+      .._toastMode = true
+      .._toastConfig = config;
   }
 
   /// Creates a colorful success/failure/warning/help snackbar banner — call
@@ -379,6 +453,12 @@ class ACDDialog {
   void show([double? x, double? y]) {
     if (context == null) return;
 
+    if (_toastMode) {
+      _toastController = ACDToastManager.show(context!, _toastConfig!);
+      _isShowing = true;
+      return;
+    }
+
     // FEAT-15/FEAT-16: overlay-mode presentation (never blocks touches)
     if (_overlayMode) {
       _showViaOverlay();
@@ -428,6 +508,7 @@ class ACDDialog {
       barrierLabel: barrierLabel,
       // IMP-08
       onBarrierTap: onBarrierTap, // FEAT-12
+      textDirection: textDirection,
     );
 
     _scheduleAutoDismiss();
@@ -435,6 +516,11 @@ class ACDDialog {
 
   /// Closes the dialog if it's currently showing. Does nothing otherwise.
   void dismiss() {
+    if (_toastMode) {
+      _toastController?.requestDismiss();
+      _isShowing = false;
+      return;
+    }
     if (_isShowing) {
       if (_overlayEntry != null) {
         // FEAT-15/FEAT-16: overlay-mode teardown
@@ -449,7 +535,8 @@ class ACDDialog {
 
   // ── Internal helpers ──────────────────────────────────────────────────────
 
-  EdgeInsets _resolveMargin() => acdResolveMarginForGravity(gravity, margin);
+  EdgeInsets _resolveMargin() =>
+      acdResolveMarginForGravity(gravity, margin, textDirection);
 
   // Resolve animation function: explicit > preset enum > none
   Function(Widget, Animation<double>)? _resolveAnimFn() {
@@ -523,7 +610,7 @@ class ACDDialog {
 
     final OverlayEntry entry = OverlayEntry(
       builder: (_) => Align(
-        alignment: acdGravityToAlignment(gravity),
+        alignment: acdGravityToAlignment(gravity, textDirection),
         child: Padding(
           padding: effectiveMargin,
           child: SafeArea(

@@ -1,6 +1,6 @@
 name: awesome_custom_dialog
-description: "Chainable dialogs, toasts, snackbars, autocomplete, switches, rating bars, motion, dashed/dotted decorations, and steppers for Flutter — customizable, zero dependencies."
-version: 1.4.0
+description: "A chainable toolkit for Flutter: dialogs, toasts, snackbars, form fields, switches, progress indicators, PIN/OTP fields, motion, and decorations. Zero dependencies."
+version: 1.5.0
 homepage: https://github.com/devamitkumartiwari/awesome_custom_dialog
 repository: https://github.com/devamitkumartiwari/awesome_custom_dialog
 issue_tracker: https://github.com/devamitkumartiwari/awesome_custom_dialog/issues
@@ -9,7 +9,7 @@ topics:
   - widgets
   - forms
   - animation
-  - ui
+  - authentication
 
 
 environment:
