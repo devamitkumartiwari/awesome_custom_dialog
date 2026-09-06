@@ -17,20 +17,30 @@ void main() {
       capture.wrap(
         MaterialApp(
           debugShowCheckedModeBanner: false,
-          home: Scaffold(
-            backgroundColor: Colors.grey.shade100,
-            body: const Center(
+          theme: demoTheme,
+          home: const Scaffold(
+            backgroundColor: demoBackground,
+            body: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   ACDSwitch.material(initialValue: false),
-                  SizedBox(height: 32),
+                  SizedBox(height: 28),
                   ACDSwitch.ios(initialValue: false),
-                  SizedBox(height: 32),
+                  SizedBox(height: 28),
                   ACDSwitch(
                     initialValue: false,
                     shape: ACDSwitchShape.roundedRectangle,
                     activeTrackColor: Color(0xFF7C4DFF),
+                    inactiveTrackColor: Color(0xFFE0E0E0),
+                  ),
+                  SizedBox(height: 28),
+                  ACDSwitch(
+                    initialValue: false,
+                    shape: ACDSwitchShape.roundedRectangle,
+                    borderRadius: BorderRadius.zero,
+                    thumbBorderRadius: BorderRadius.zero,
+                    activeTrackColor: Color(0xFF00897B),
                     inactiveTrackColor: Color(0xFFE0E0E0),
                   ),
                 ],

@@ -20,8 +20,9 @@ void main() {
       capture.wrap(
         MaterialApp(
           debugShowCheckedModeBanner: false,
+          theme: demoTheme,
           home: Scaffold(
-            backgroundColor: Colors.grey.shade100,
+            backgroundColor: demoBackground,
             body: Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -53,6 +54,23 @@ void main() {
                       controller: circular,
                       progressColor: Colors.green,
                       showPercentageText: true,
+                    ),
+                    const SizedBox(height: 32),
+                    const ACDMultiSegmentLinearIndicator(
+                      lineHeight: 16,
+                      barRadius: Radius.circular(8),
+                      segments: [
+                        ACDLoaderSegment(
+                          key: 'download',
+                          percent: 0.5,
+                          color: Colors.deepPurple,
+                        ),
+                        ACDLoaderSegment(
+                          key: 'verify',
+                          percent: 0.2,
+                          color: Colors.orangeAccent,
+                        ),
+                      ],
                     ),
                   ],
                 ),

@@ -2,9 +2,42 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Shared brand seed for every README demo GIF — a modern indigo/violet
+/// matching the accent already used in the dialog-styling demo
+/// (`0xFF6A11CB`/`0xFF2575FC`), applied consistently via Material 3 so
+/// every button/chip/switch/slider across all 20 GIFs shares one cohesive,
+/// deliberate palette instead of Flutter's default debug blue.
+const Color demoSeedColor = Color(0xFF6C5CE7);
+
+/// A soft, warm off-white — elegant and neutral without the flat, slightly
+/// clinical look of `Colors.grey.shade100`.
+const Color demoBackground = Color(0xFFF8F7FC);
+
+/// The theme every capture script's `MaterialApp` should use, for a
+/// consistent, modern Material 3 look across the whole README.
+final ThemeData demoTheme = ThemeData(
+  useMaterial3: true,
+  colorSchemeSeed: demoSeedColor,
+  scaffoldBackgroundColor: demoBackground,
+  elevatedButtonTheme: ElevatedButtonThemeData(
+    style: ElevatedButton.styleFrom(
+      elevation: 0,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+  ),
+  outlinedButtonTheme: OutlinedButtonThemeData(
+    style: OutlinedButton.styleFrom(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    ),
+  ),
+  cardTheme: const CardThemeData(elevation: 2, margin: EdgeInsets.zero),
+);
 
 /// Deterministic PNG-frame capture for producing README GIFs. Pumps and
 /// drives a widget under test, snapshotting each frame via

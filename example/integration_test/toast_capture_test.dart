@@ -5,9 +5,26 @@ import 'package:integration_test/integration_test.dart';
 
 import 'gif_capture_harness.dart';
 
-/// Captures README GIF frames for the Toast section.
+/// Captures README GIF frames for the Toast section — cycles four
+/// style/content-type combinations for full feature coverage in one GIF.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  const List<({String label, ACDContentType type, ACDToastStyle style})>
+  variants = [
+    (
+      label: 'Filled',
+      type: ACDContentType.success,
+      style: ACDToastStyle.filled,
+    ),
+    (label: 'Flat', type: ACDContentType.failure, style: ACDToastStyle.flat),
+    (
+      label: 'Flat Colored',
+      type: ACDContentType.warning,
+      style: ACDToastStyle.flatColored,
+    ),
+    (label: 'Minimal', type: ACDContentType.help, style: ACDToastStyle.minimal),
+  ];
 
   testWidgets('capture toast', (tester) async {
     final capture = GifCapture(tester, 'build/gif_frames/toast');
@@ -17,21 +34,31 @@ void main() {
       capture.wrap(
         MaterialApp(
           debugShowCheckedModeBanner: false,
+          theme: demoTheme,
           home: Scaffold(
-            backgroundColor: Colors.grey.shade100,
+            backgroundColor: demoBackground,
             body: Builder(
               builder: (context) => Center(
-                child: ElevatedButton(
-                  onPressed: () {
-                    ACDDialog.toast(
-                      context: context,
-                      message: 'Changes saved successfully!',
-                      showDuration: const Duration(seconds: 2),
-                      showProgressBar: true,
-                      contentType: ACDContentType.success,
-                    ).show();
-                  },
-                  child: const Text('Show Toast'),
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    for (final v in variants)
+                      OutlinedButton(
+                        onPressed: () {
+                          ACDDialog.toast(
+                            context: context,
+                            message: '${v.label} toast, ${v.type.name} type',
+                            showDuration: const Duration(milliseconds: 1300),
+                            showProgressBar: true,
+                            contentType: v.type,
+                            style: v.style,
+                          ).show();
+                        },
+                        child: Text(v.label),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -41,16 +68,19 @@ void main() {
     );
 
     await capture.pumpAndCapture(Duration.zero);
-    await tester.tap(find.text('Show Toast'));
-    for (int i = 0; i < 8; i++) {
-      await capture.pumpAndCapture(const Duration(milliseconds: 60));
+
+    for (final v in variants) {
+      await tester.tap(find.text(v.label));
+      for (int i = 0; i < 6; i++) {
+        await capture.pumpAndCapture(const Duration(milliseconds: 60));
+      }
+      for (int i = 0; i < 12; i++) {
+        await capture.pumpAndCapture(const Duration(milliseconds: 100));
+      }
+      for (int i = 0; i < 6; i++) {
+        await capture.pumpAndCapture(const Duration(milliseconds: 60));
+      }
+      await capture.hold(3);
     }
-    for (int i = 0; i < 20; i++) {
-      await capture.pumpAndCapture(const Duration(milliseconds: 100));
-    }
-    for (int i = 0; i < 6; i++) {
-      await capture.pumpAndCapture(const Duration(milliseconds: 60));
-    }
-    await capture.hold(6);
   });
 }

@@ -26,8 +26,9 @@ void main() {
       capture.wrap(
         MaterialApp(
           debugShowCheckedModeBanner: false,
+          theme: demoTheme,
           home: Scaffold(
-            backgroundColor: Colors.grey.shade100,
+            backgroundColor: demoBackground,
             body: SafeArea(
               child: ACDStaggeredList(
                 itemCount: fruits.length,

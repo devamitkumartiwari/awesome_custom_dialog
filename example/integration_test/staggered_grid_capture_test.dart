@@ -18,8 +18,9 @@ void main() {
       capture.wrap(
         MaterialApp(
           debugShowCheckedModeBanner: false,
+          theme: demoTheme,
           home: Scaffold(
-            backgroundColor: Colors.grey.shade100,
+            backgroundColor: demoBackground,
             body: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.all(12),

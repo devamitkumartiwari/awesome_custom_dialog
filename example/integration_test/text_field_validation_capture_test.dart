@@ -22,8 +22,9 @@ void main() {
       capture.wrap(
         MaterialApp(
           debugShowCheckedModeBanner: false,
+          theme: demoTheme,
           home: Scaffold(
-            backgroundColor: Colors.grey.shade100,
+            backgroundColor: demoBackground,
             body: Builder(
               builder: (context) => Center(
                 child: ElevatedButton(
@@ -34,6 +35,7 @@ void main() {
                       ..acdTextField(
                         hint: 'Enter your full name',
                         fieldKey: fieldKey,
+                        padding: const EdgeInsets.fromLTRB(20, 22, 20, 6),
                         validator: (value) =>
                             (value == null || value.trim().isEmpty)
                             ? 'Name is required'
@@ -43,6 +45,7 @@ void main() {
                       ..oneButton(
                         text: 'Submit',
                         isClickAutoDismiss: false,
+                        buttonPadding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                         onTap: () {
                           if (fieldKey.currentState?.validate() ?? false) {
                             dialog.dismiss();

@@ -5,7 +5,9 @@ import 'package:integration_test/integration_test.dart';
 
 import 'gif_capture_harness.dart';
 
-/// Captures README GIF frames for "14. Motion & Animated Text".
+/// Captures README GIF frames for "14. Motion & Animated Text" — the
+/// per-character text entrance plus three different `ACDMotionRestEffect`
+/// loops (pulse/wave/rotate) for broader rest-effect coverage.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -13,27 +15,50 @@ void main() {
     final capture = GifCapture(tester, 'build/gif_frames/motion-animated-text');
     await capture.setSize();
 
+    Widget chip(IconData icon, Color color, ACDMotionRestEffect effect) =>
+        ACDMotion(
+          restEffect: ACDRestEffectConfig(effect: effect),
+          delay: const Duration(milliseconds: 1400),
+          child: Icon(icon, color: color, size: 40),
+        );
+
     await tester.pumpWidget(
       capture.wrap(
         MaterialApp(
           debugShowCheckedModeBanner: false,
+          theme: demoTheme,
           home: Scaffold(
-            backgroundColor: Colors.grey.shade100,
-            body: const Center(
+            backgroundColor: demoBackground,
+            body: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ACDAnimatedText(
+                  const ACDAnimatedText(
                     text: 'Hello, world!',
                     style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                   ),
-                  SizedBox(height: 32),
-                  ACDMotion(
-                    restEffect: ACDRestEffectConfig(
-                      effect: ACDMotionRestEffect.pulse,
-                    ),
-                    delay: Duration(milliseconds: 1400),
-                    child: Icon(Icons.favorite, color: Colors.red, size: 48),
+                  const SizedBox(height: 36),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      chip(
+                        Icons.favorite,
+                        Colors.red,
+                        ACDMotionRestEffect.pulse,
+                      ),
+                      const SizedBox(width: 28),
+                      chip(
+                        Icons.waving_hand,
+                        Colors.orange,
+                        ACDMotionRestEffect.wave,
+                      ),
+                      const SizedBox(width: 28),
+                      chip(
+                        Icons.settings,
+                        demoSeedColor,
+                        ACDMotionRestEffect.rotate,
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -46,7 +71,7 @@ void main() {
     for (int i = 0; i < 16; i++) {
       await capture.pumpAndCapture(const Duration(milliseconds: 90));
     }
-    for (int i = 0; i < 14; i++) {
+    for (int i = 0; i < 20; i++) {
       await capture.pumpAndCapture(const Duration(milliseconds: 120));
     }
     await capture.hold(6);
