@@ -1,0 +1,5 @@
+# README demo GIFs and the tooling that generates them — these live in the
+# git repo so pub.dev's README renderer can fetch them via the `repository:`
+# field's raw-content URLs, but they don't need to ship inside the published
+# package tarball.
+/doc/

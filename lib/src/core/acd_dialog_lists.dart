@@ -4,6 +4,8 @@ import '../list_tile/acd_checkbox_list_tile.dart';
 import 'acd_dialog.dart';
 import '../list_tile/acd_list_tile_item.dart';
 import '../list_tile/acd_radio_list_tile.dart';
+import '../motion/acd_motion.dart';
+import '../motion/acd_stagger_options.dart';
 
 /// Adds `listOfACDListTile()`, `listOfACDRadioButton()`, and
 /// `listOfACDCheckbox()` to [ACDDialog] for adding scrollable list content.
@@ -20,7 +22,11 @@ extension ACDDialogLists on ACDDialog {
     ScrollPhysics? physics,
     ScrollController? controller,
     BorderRadius? borderRadius,
+    // Entrance-only stagger for this row of tiles. `null` (the default)
+    // keeps today's unanimated behavior.
+    ACDStaggerOptions? stagger,
   }) {
+    final int itemCount = items?.length ?? 0;
     return widget(
       Padding(
         padding: padding ?? EdgeInsets.zero,
@@ -31,9 +37,9 @@ extension ACDDialogLists on ACDDialog {
             shrinkWrap: true,
             physics: physics,
             controller: controller,
-            itemCount: items?.length ?? 0,
+            itemCount: itemCount,
             itemBuilder: (BuildContext context, int index) {
-              return Material(
+              final Widget tile = Material(
                 color: tileColor,
                 child: ListTile(
                   onTap: () {
@@ -62,6 +68,16 @@ extension ACDDialogLists on ACDDialog {
                   ),
                 ),
               );
+              if (stagger == null) return tile;
+              return ACDMotion(
+                key: ValueKey<int>(index),
+                delay: stagger.delayForIndex(index, itemCount, visible: true),
+                duration: stagger.itemDuration,
+                curve: stagger.curve,
+                effect: stagger.effect,
+                exitEffect: stagger.exitEffect,
+                child: tile,
+              );
             },
           ),
         ),
@@ -82,6 +98,9 @@ extension ACDDialogLists on ACDDialog {
     ScrollPhysics? physics,
     ScrollController? controller,
     BorderRadius? borderRadius,
+    // Entrance-only stagger for this row of tiles. `null` (the default)
+    // keeps today's unanimated behavior.
+    ACDStaggerOptions? stagger,
   }) {
     if (context == null) return this;
     final size = MediaQuery.of(context!).size;
@@ -103,6 +122,7 @@ extension ACDDialogLists on ACDDialog {
           controller: controller,
           onChanged: onClickItemListener,
           borderRadius: borderRadius,
+          stagger: stagger,
         ),
       ),
     );
@@ -121,6 +141,9 @@ extension ACDDialogLists on ACDDialog {
     ScrollPhysics? physics,
     ScrollController? controller,
     BorderRadius? borderRadius,
+    // Entrance-only stagger for this row of tiles. `null` (the default)
+    // keeps today's unanimated behavior.
+    ACDStaggerOptions? stagger,
   }) {
     if (context == null) return this;
     final size = MediaQuery.of(context!).size;
@@ -142,6 +165,7 @@ extension ACDDialogLists on ACDDialog {
           controller: controller,
           onChanged: onChanged,
           borderRadius: borderRadius,
+          stagger: stagger,
         ),
       ),
     );

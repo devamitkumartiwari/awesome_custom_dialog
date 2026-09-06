@@ -20,9 +20,9 @@ class DashedHubScreen extends StatelessWidget {
           subtitle: 'ACDDashedLine — horizontal & vertical',
           icon: Icons.horizontal_rule_rounded,
           color: Colors.brown,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const DashedLinesScreen()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const DashedLinesScreen())),
         ),
         const SizedBox(height: AppSpacing.sm),
         CategoryCard(
@@ -40,9 +40,9 @@ class DashedHubScreen extends StatelessWidget {
           subtitle: 'ACDDashedBorder — wraps any widget, custom paths too',
           icon: Icons.border_outer_rounded,
           color: Colors.brown,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const DashedBorderScreen()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const DashedBorderScreen())),
         ),
       ],
     );

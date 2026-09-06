@@ -76,16 +76,19 @@ ACDSlideAction(
           onConfirm: () => _simulate(_customController),
           outerBackgroundBuilder: (context, progress, status) => Container(
             decoration: BoxDecoration(
-              gradient:
-                  const LinearGradient(colors: [Colors.orange, Colors.pink]),
+              gradient: const LinearGradient(
+                colors: [Colors.orange, Colors.pink],
+              ),
               borderRadius: BorderRadius.circular(32),
             ),
           ),
           backgroundBuilder: (context, progress, status) => const Center(
             child: Text(
               'Custom track & label',
-              style:
-                  TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ),

@@ -19,9 +19,8 @@ class AutocompleteHubScreen extends StatelessWidget {
           subtitle: 'ACDAutocompleteField — local & remote suggestions',
           icon: Icons.text_fields_rounded,
           color: Colors.lightBlue,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const TypeaheadScreen()),
-          ),
+          onTap: () => Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => const TypeaheadScreen())),
         ),
         const SizedBox(height: AppSpacing.sm),
         CategoryCard(
@@ -29,9 +28,8 @@ class AutocompleteHubScreen extends StatelessWidget {
           subtitle: 'ACDTriggerAutocompleteField — @mention / #hashtag',
           icon: Icons.alternate_email,
           color: Colors.lightBlue,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const TriggerScreen()),
-          ),
+          onTap: () => Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => const TriggerScreen())),
         ),
       ],
     );

@@ -43,7 +43,8 @@ class SlideActionHubScreen extends StatelessWidget {
           color: Colors.deepPurple,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(
-                builder: (_) => const SlideActionCustomBuilderScreen()),
+              builder: (_) => const SlideActionCustomBuilderScreen(),
+            ),
           ),
         ),
       ],

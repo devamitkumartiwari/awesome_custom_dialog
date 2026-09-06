@@ -9,19 +9,18 @@ class MotionSequencesScreen extends StatelessWidget {
   const MotionSequencesScreen({super.key});
 
   Widget _chip(String label, Color color) => Container(
-        width: 120,
-        height: 64,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Text(
-          label,
-          style:
-              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-      );
+    width: 120,
+    height: 64,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Text(
+      label,
+      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {

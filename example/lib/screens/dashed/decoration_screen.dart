@@ -19,11 +19,17 @@ class DottedDecorationScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             _boxFor(
-                'Line', const ACDDottedDecoration(shape: ACDDottedShape.line)),
+              'Line',
+              const ACDDottedDecoration(shape: ACDDottedShape.line),
+            ),
             _boxFor(
-                'Box', const ACDDottedDecoration(shape: ACDDottedShape.box)),
+              'Box',
+              const ACDDottedDecoration(shape: ACDDottedShape.box),
+            ),
             _boxFor(
-                'Oval', const ACDDottedDecoration(shape: ACDDottedShape.oval)),
+              'Oval',
+              const ACDDottedDecoration(shape: ACDDottedShape.oval),
+            ),
           ],
         ),
         const SizedBox(height: 32),

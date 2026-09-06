@@ -8,6 +8,7 @@ import 'acd_content_type.dart';
 import 'acd_gravity.dart';
 import 'acd_overlay_transition.dart';
 import 'acd_presenter.dart';
+import '../motion/acd_stagger_options.dart';
 import '../toast/toast.dart';
 import '../toast_snackbar/acd_snackbar_content.dart';
 
@@ -33,6 +34,17 @@ class ACDDialog {
   // ── Widget content ────────────────────────────────────────────────────────
   /// The content widgets added so far via [widget] and the builder methods.
   List<Widget> widgetList = [];
+
+  /// When set, every top-level content widget added so far (`.text()`,
+  /// `.oneButton()`, `listOfACDListTile()`, etc. — in whatever order they
+  /// were chained) plays a staggered entrance, and a staggered exit right
+  /// before the dialog is actually removed from the tree. `null` (the
+  /// default) keeps today's unanimated `Column` behavior.
+  ACDStaggerOptions? contentStagger;
+
+  // Drives ACDChildren's per-item entrance/exit when contentStagger is set —
+  // flipped to false by dismiss() so the exit plays before actual removal.
+  final ValueNotifier<bool> _contentVisible = ValueNotifier<bool>(true);
 
   // ── Context ───────────────────────────────────────────────────────────────
   static BuildContext? _context;
@@ -79,12 +91,23 @@ class ACDDialog {
   /// presentation (`.toast()`/`.snackbar()`).
   Color barrierColor = const Color.fromRGBO(0, 0, 0, 0.3);
 
-  /// Fully custom background decoration, overriding [backgroundColor] and
-  /// [borderRadius]/[cornerRadius].
+  /// Fully custom background decoration, overriding [backgroundColor],
+  /// [backgroundGradient], [backgroundImage], [shape], and
+  /// [borderRadius]/[cornerRadius]'s fill (though [shape]/[borderRadius]
+  /// still determine child-clipping).
   Decoration? decoration;
 
-  /// Background color of the dialog card.
+  /// Background color of the dialog card. Ignored when [backgroundGradient]
+  /// or [decoration] is set.
   Color backgroundColor = Colors.white;
+
+  /// Gradient fill, overriding [backgroundColor]. Ignored when [decoration]
+  /// is set.
+  Gradient? backgroundGradient;
+
+  /// Background image/texture, layered over [backgroundColor]/
+  /// [backgroundGradient]. Ignored when [decoration] is set.
+  DecorationImage? backgroundImage;
 
   /// Uniform corner radius for the dialog card. For per-corner control (e.g.
   /// a side panel that should only round its exposed corners), use
@@ -96,6 +119,26 @@ class ACDDialog {
   /// rounded). Takes precedence over the uniform [borderRadius] above when
   /// set.
   BorderRadius? cornerRadius;
+
+  /// Escape hatch beyond [borderRadius]/[cornerRadius] — a full custom
+  /// shape (pill, notched, cut corners, etc.) for the card. When set,
+  /// [boxShadow]/[elevation] still apply (drawn behind this shape), but
+  /// [decoration] is ignored — mirrors `ACDToastConfig.shape`.
+  ShapeBorder? shape;
+
+  /// Drop-shadow elevation for the dialog card. Ignored when [boxShadow] is
+  /// set.
+  double elevation = 0;
+
+  /// Color of the elevation-driven drop shadow. Falls back to a translucent
+  /// black (matching every other widget's default elevation shadow in this
+  /// package) when unset. Ignored when [boxShadow] is set.
+  Color? shadowColor;
+
+  /// Explicit shadow for the dialog card, overriding [elevation]/
+  /// [shadowColor]. Always rendered on the outermost, unclipped layer so
+  /// it's never clipped away by the card's own content-clipping.
+  List<BoxShadow>? boxShadow;
 
   // ── Behaviour ─────────────────────────────────────────────────────────────
   /// Whether tapping outside the dialog dismisses it. Ignored in
@@ -452,6 +495,7 @@ class ACDDialog {
   /// dialog at exact screen coordinates instead of using [gravity].
   void show([double? x, double? y]) {
     if (context == null) return;
+    _contentVisible.value = true;
 
     if (_toastMode) {
       _toastController = ACDToastManager.show(context!, _toastConfig!);
@@ -515,21 +559,36 @@ class ACDDialog {
   }
 
   /// Closes the dialog if it's currently showing. Does nothing otherwise.
-  void dismiss() {
+  /// When [contentStagger] is set, first plays its staggered exit and waits
+  /// for it to finish before actually removing the dialog — existing
+  /// callers that don't await the returned `Future` are unaffected (`void`
+  /// call sites/`VoidCallback` assignments remain valid).
+  Future<void> dismiss() async {
     if (_toastMode) {
       _toastController?.requestDismiss();
       _isShowing = false;
       return;
     }
-    if (_isShowing) {
-      if (_overlayEntry != null) {
-        // FEAT-15/FEAT-16: overlay-mode teardown
-        _overlayEntry!.remove();
-        _overlayEntry = null;
-      } else {
-        Navigator.of(context!, rootNavigator: useRootNavigator).pop();
-      }
-      _isShowing = false;
+    if (!_isShowing) return;
+    _isShowing = false;
+
+    final ACDStaggerOptions? options = contentStagger;
+    if (options != null && widgetList.isNotEmpty) {
+      _contentVisible.value = false;
+      await Future<void>.delayed(
+        options.startDelay +
+            options.interval * (widgetList.length - 1) +
+            options.itemDuration,
+      );
+      if (context == null || !context!.mounted) return;
+    }
+
+    if (_overlayEntry != null) {
+      // FEAT-15/FEAT-16: overlay-mode teardown
+      _overlayEntry!.remove();
+      _overlayEntry = null;
+    } else {
+      Navigator.of(context!, rootNavigator: useRootNavigator).pop();
     }
   }
 
@@ -541,7 +600,9 @@ class ACDDialog {
   // Resolve animation function: explicit > preset enum > none
   Function(Widget, Animation<double>)? _resolveAnimFn() {
     return animatedFunc ??
-        (animation != ACDAnimation.none ? acdPresetAnimFn(animation) : null);
+        (animation != ACDAnimation.none
+            ? acdPresetAnimFn(animation, textDirection)
+            : null);
   }
 
   Widget _buildContentCard() {
@@ -552,29 +613,67 @@ class ACDDialog {
     final BorderRadius effectiveRadius =
         cornerRadius ?? BorderRadius.circular(borderRadius);
 
-    return Material(
+    final Widget content = ACDChildren(
+      widgetList: widgetList,
+      staggerOptions: contentStagger,
+      visible: _contentVisible,
+      onShown: () {
+        _isShowing = true;
+        showCallBack?.call();
+      },
+      onDismissed: () {
+        _isShowing = false;
+        dismissCallBack?.call();
+      },
+    );
+
+    // ShapeDecoration subsumes BoxDecoration's rectangle-only borderRadius,
+    // so a custom shape (pill, notched, etc.) can carry the same
+    // color/gradient/image fill as the default rounded-rect case — unlike
+    // ACDToastConfig.shape, which is limited to a flat color fill.
+    // decoration remains a full escape hatch overriding all of the above.
+    final Widget card = Material(
       clipBehavior: Clip.antiAlias,
       type: MaterialType.transparency,
-      borderRadius: effectiveRadius,
+      shape: shape,
+      borderRadius: shape == null ? effectiveRadius : null,
       child: Container(
         width: width,
         height: height,
         decoration:
             decoration ??
-            BoxDecoration(borderRadius: effectiveRadius, color: effectiveBg),
+            ShapeDecoration(
+              shape:
+                  shape ??
+                  RoundedRectangleBorder(borderRadius: effectiveRadius),
+              // ShapeDecoration (unlike BoxDecoration) forbids setting both
+              // color and gradient at once — gradient wins when set.
+              color: backgroundGradient == null ? effectiveBg : null,
+              gradient: backgroundGradient,
+              image: backgroundImage,
+            ),
         constraints: constraints ?? const BoxConstraints(),
-        child: ACDChildren(
-          widgetList: widgetList,
-          onShown: () {
-            _isShowing = true;
-            showCallBack?.call();
-          },
-          onDismissed: () {
-            _isShowing = false;
-            dismissCallBack?.call();
-          },
-        ),
+        child: content,
       ),
+    );
+
+    // Shadow always on the outermost, unclipped layer — a clip wrapper
+    // around the fill/shape (above) must never also clip this away.
+    final List<BoxShadow>? effectiveShadow =
+        boxShadow ??
+        (elevation > 0
+            ? [
+                BoxShadow(
+                  color: shadowColor ?? Colors.black.withValues(alpha: 0.2),
+                  blurRadius: elevation * 2,
+                  offset: Offset(0, elevation / 2),
+                ),
+              ]
+            : null);
+    if (effectiveShadow == null) return card;
+    return Container(
+      decoration: BoxDecoration(boxShadow: effectiveShadow),
+      child: card,
     );
   }
 

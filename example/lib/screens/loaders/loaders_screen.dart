@@ -29,10 +29,7 @@ class _LoadersScreenState extends State<LoadersScreen> {
           barRadius: const Radius.circular(6),
           showPercentageText: true,
         ),
-        Slider(
-          value: _value,
-          onChanged: (v) => setState(() => _value = v),
-        ),
+        Slider(value: _value, onChanged: (v) => setState(() => _value = v)),
         const CodeSnippet(
           code: '''
 ACDLinearPercentIndicator(
@@ -112,11 +109,20 @@ ACDCircularPercentIndicator(
           spacing: 6,
           segments: [
             ACDLoaderSegment(
-                key: 'downloaded', percent: 0.6, color: Colors.blue),
+              key: 'downloaded',
+              percent: 0.6,
+              color: Colors.blue,
+            ),
             ACDLoaderSegment(
-                key: 'verified', percent: 0.3, color: Colors.orange),
+              key: 'verified',
+              percent: 0.3,
+              color: Colors.orange,
+            ),
             ACDLoaderSegment(
-                key: 'installed', percent: 0.1, color: Colors.green),
+              key: 'installed',
+              percent: 0.1,
+              color: Colors.green,
+            ),
           ],
         ),
         const CodeSnippet(

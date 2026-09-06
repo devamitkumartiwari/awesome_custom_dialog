@@ -139,8 +139,9 @@ ACDDialog().build(context)
           leading: CircleAvatar(child: Text(user.name[0])),
           title: Text(user.name),
           subtitle: Text(user.email),
-          trailing:
-              selected ? const Icon(Icons.check, color: Colors.teal) : null,
+          trailing: selected
+              ? const Icon(Icons.check, color: Colors.teal)
+              : null,
         ),
         onChange: (user) => debugPrint('Assigned to ${user.name}'),
       )

@@ -1,5 +1,8 @@
 import 'dart:ui' show Offset;
 
+import 'package:flutter/widgets.dart'
+    show BuildContext, Directionality, TextDirection;
+
 /// A shared, immutable begin→end visual-effect configuration consumed
 /// identically by [ACDMotion]'s entrance/exit effects, [ACDAnimatedText]'s
 /// per-character effect, and [ACDMotion]'s one-shot tap effect — one typed
@@ -167,4 +170,41 @@ final class ACDMotionEffect {
   /// Fades out while sliding down, [distance] widget-heights away.
   static ACDMotionEffect fadeSlideOut([double distance = 0.3]) =>
       ACDMotionEffect(endOpacity: 0, endOffsetFactor: Offset(0, distance));
+
+  /// Slides in from the reading-direction start (left under LTR, right
+  /// under RTL) — resolved from the ambient `Directionality` at [context],
+  /// unlike the purely physical [slideInFromLeft]/[slideInFromRight]. The
+  /// recommended choice for staggered list/grid items, where entries should
+  /// visually flow in from "before" regardless of locale.
+  static ACDMotionEffect slideInFromStart(
+    BuildContext context, [
+    double distance = 1.0,
+  ]) => Directionality.of(context) == TextDirection.rtl
+      ? slideInFromRight(distance)
+      : slideInFromLeft(distance);
+
+  /// Slides in from the reading-direction end (right under LTR, left under
+  /// RTL) — see [slideInFromStart].
+  static ACDMotionEffect slideInFromEnd(
+    BuildContext context, [
+    double distance = 1.0,
+  ]) => Directionality.of(context) == TextDirection.rtl
+      ? slideInFromLeft(distance)
+      : slideInFromRight(distance);
+
+  /// Slides out toward the reading-direction start — see [slideInFromStart].
+  static ACDMotionEffect slideOutToStart(
+    BuildContext context, [
+    double distance = 1.0,
+  ]) => Directionality.of(context) == TextDirection.rtl
+      ? slideOutToRight(distance)
+      : slideOutToLeft(distance);
+
+  /// Slides out toward the reading-direction end — see [slideInFromStart].
+  static ACDMotionEffect slideOutToEnd(
+    BuildContext context, [
+    double distance = 1.0,
+  ]) => Directionality.of(context) == TextDirection.rtl
+      ? slideOutToLeft(distance)
+      : slideOutToRight(distance);
 }

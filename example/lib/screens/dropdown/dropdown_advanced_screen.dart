@@ -58,8 +58,9 @@ class DropdownAdvancedScreen extends StatelessWidget {
             leading: CircleAvatar(child: Text(user.name[0])),
             title: Text(user.name),
             subtitle: Text(user.email),
-            trailing:
-                selected ? const Icon(Icons.check, color: Colors.teal) : null,
+            trailing: selected
+                ? const Icon(Icons.check, color: Colors.teal)
+                : null,
           ),
           decoration: const InputDecoration(
             labelText: 'Assign to',
@@ -143,7 +144,8 @@ ACDDropdownField<String>(
     if (page >= totalPages) return const [];
     return List.generate(
       pageSize,
-      (i) => 'Result ${page * pageSize + i + 1}'
+      (i) =>
+          'Result ${page * pageSize + i + 1}'
           '${query.isEmpty ? '' : ' ($query)'}',
     );
   }

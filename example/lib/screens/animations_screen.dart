@@ -20,15 +20,25 @@ class AnimationsScreen extends StatelessWidget {
           child: Row(
             children: [
               animChip(
-                  'Scale', () => _showAnimation(context, ACDAnimation.scale)),
+                'Scale',
+                () => _showAnimation(context, ACDAnimation.scale),
+              ),
               animChip(
-                  'Fade', () => _showAnimation(context, ACDAnimation.fade)),
+                'Fade',
+                () => _showAnimation(context, ACDAnimation.fade),
+              ),
               animChip(
-                  'Bounce', () => _showAnimation(context, ACDAnimation.bounce)),
-              animChip('Slide Up',
-                  () => _showAnimation(context, ACDAnimation.slideUp)),
+                'Bounce',
+                () => _showAnimation(context, ACDAnimation.bounce),
+              ),
               animChip(
-                  'Rotate', () => _showAnimation(context, ACDAnimation.rotate)),
+                'Slide Up',
+                () => _showAnimation(context, ACDAnimation.slideUp),
+              ),
+              animChip(
+                'Rotate',
+                () => _showAnimation(context, ACDAnimation.rotate),
+              ),
             ],
           ),
         ),

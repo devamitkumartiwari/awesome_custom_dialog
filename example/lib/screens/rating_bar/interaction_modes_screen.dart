@@ -35,8 +35,7 @@ class RatingBarInteractionModesScreen extends StatelessWidget {
           interactionMode: ACDRatingInteractionMode.none,
         ),
         const CodeSnippet(
-          code:
-              "ACDRatingBar(rating: 4, interactionMode: ACDRatingInteractionMode.none)",
+          code: "ACDRatingBar(rating: 4, interactionMode: ACDRatingInteractionMode.none)",
         ),
         const SizedBox(height: 24),
         sectionHeader('clearOnReTap — tap the top rating again to clear it'),

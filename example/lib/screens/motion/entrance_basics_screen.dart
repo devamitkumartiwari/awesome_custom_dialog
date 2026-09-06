@@ -19,19 +19,18 @@ class _MotionEntranceBasicsScreenState
   bool _visible = true;
 
   Widget _chip(String label, Color color) => Container(
-        width: 64,
-        height: 64,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Text(
-          label,
-          style:
-              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-      );
+    width: 64,
+    height: 64,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Text(
+      label,
+      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +97,9 @@ ACDMotion(
                 effect: ACDMotionEffect.fadeSlideIn(),
                 delay: Duration(milliseconds: i * 120),
                 child: _chip(
-                    '${i + 1}', Colors.primaries[i % Colors.primaries.length]),
+                  '${i + 1}',
+                  Colors.primaries[i % Colors.primaries.length],
+                ),
               ),
           ],
         ),

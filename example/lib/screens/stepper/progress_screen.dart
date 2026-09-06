@@ -49,10 +49,12 @@ ACDStepper(
         ACDStepper(
           steps: const ['Draft', 'Review', 'Published'],
           activeStep: 1,
-          finishedStepGradient:
-              const LinearGradient(colors: [Colors.teal, Colors.green]),
-          activeStepGradient:
-              const LinearGradient(colors: [Colors.deepPurple, Colors.indigo]),
+          finishedStepGradient: const LinearGradient(
+            colors: [Colors.teal, Colors.green],
+          ),
+          activeStepGradient: const LinearGradient(
+            colors: [Colors.deepPurple, Colors.indigo],
+          ),
           markerElevation: 4,
         ),
         const SizedBox(height: 32),

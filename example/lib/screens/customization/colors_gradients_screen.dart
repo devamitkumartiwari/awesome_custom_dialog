@@ -31,7 +31,8 @@ class _ColorsGradientsScreenState extends State<ColorsGradientsScreen> {
 
   Gradient? get _gradient => _useGradient
       ? LinearGradient(
-          colors: [_color, Color.alphaBlend(Colors.white38, _color)])
+          colors: [_color, Color.alphaBlend(Colors.white38, _color)],
+        )
       : null;
 
   @override
@@ -52,13 +53,16 @@ class _ColorsGradientsScreenState extends State<ColorsGradientsScreen> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Use gradient'),
                   subtitle: const Text(
-                      'Every widget below accepts a Gradient? override'),
+                    'Every widget below accepts a Gradient? override',
+                  ),
                   value: _useGradient,
                   onChanged: (v) => setState(() => _useGradient = v),
                 ),
                 const SizedBox(height: 8),
-                Text('Accent color',
-                    style: Theme.of(context).textTheme.labelLarge),
+                Text(
+                  'Accent color',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 12,
@@ -70,8 +74,11 @@ class _ColorsGradientsScreenState extends State<ColorsGradientsScreen> {
                           backgroundColor: _palette[i],
                           radius: 18,
                           child: i == _colorIndex
-                              ? const Icon(Icons.check,
-                                  color: Colors.white, size: 18)
+                              ? const Icon(
+                                  Icons.check,
+                                  color: Colors.white,
+                                  size: 18,
+                                )
                               : null,
                         ),
                       ),

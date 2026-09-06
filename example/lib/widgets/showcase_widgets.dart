@@ -6,60 +6,56 @@ import '../theme/app_theme.dart';
 /// Small caption-style header used above a group of demos on a category
 /// screen. Pass [description] for a longer explanatory line underneath.
 Widget sectionHeader(String label, {String? description}) => Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm, top: AppSpacing.xs),
-      child: Builder(
-        builder: (context) {
-          final scheme = Theme.of(context).colorScheme;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label.toUpperCase(),
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: scheme.primary,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.1,
-                    ),
-              ),
-              if (description != null) ...[
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  description,
-                  style: Theme.of(
-                    context,
-                  )
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: scheme.onSurfaceVariant),
-                ),
-              ],
-            ],
-          );
-        },
-      ),
-    );
+  padding: const EdgeInsets.only(bottom: AppSpacing.sm, top: AppSpacing.xs),
+  child: Builder(
+    builder: (context) {
+      final scheme = Theme.of(context).colorScheme;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: scheme.primary,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.1,
+            ),
+          ),
+          if (description != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              description,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ],
+      );
+    },
+  ),
+);
 
 /// 2-column grid of [actionCard]s.
 Widget buildGrid(List<Widget> children) => GridView.count(
-      physics: const NeverScrollableScrollPhysics(),
-      shrinkWrap: true,
-      crossAxisCount: 2,
-      mainAxisSpacing: AppSpacing.md,
-      crossAxisSpacing: AppSpacing.md,
-      childAspectRatio: 1.5,
-      children: children,
-    );
+  physics: const NeverScrollableScrollPhysics(),
+  shrinkWrap: true,
+  crossAxisCount: 2,
+  mainAxisSpacing: AppSpacing.md,
+  crossAxisSpacing: AppSpacing.md,
+  childAspectRatio: 1.5,
+  children: children,
+);
 
 /// Rounded card containing a column of [listItem]s.
 Widget buildList(List<Widget> children) => Builder(
-      builder: (context) {
-        return Card(
-          margin: EdgeInsets.zero,
-          clipBehavior: Clip.antiAlias,
-          child: Column(children: children),
-        );
-      },
+  builder: (context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: children),
     );
+  },
+);
 
 /// Square icon + label card, used in grid layouts.
 Widget actionCard(
@@ -67,33 +63,31 @@ Widget actionCard(
   IconData icon,
   Color color,
   VoidCallback onTap,
-) =>
-    Card(
-      margin: EdgeInsets.zero,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.sm),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _IconChip(icon: icon, color: color, size: 44),
-              const SizedBox(height: AppSpacing.sm),
-              Builder(
-                builder: (context) => Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
+) => Card(
+  margin: EdgeInsets.zero,
+  child: InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(AppRadius.lg),
+    child: Padding(
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _IconChip(icon: icon, color: color, size: 44),
+          const SizedBox(height: AppSpacing.sm),
+          Builder(
+            builder: (context) => Text(
+              label,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelLarge
+                  ?.copyWith(fontWeight: FontWeight.w600),
+            ),
           ),
-        ),
+        ],
       ),
-    );
+    ),
+  ),
+);
 
 /// Icon + title/subtitle row, used inside [buildList].
 Widget listItem(
@@ -101,41 +95,38 @@ Widget listItem(
   String subtitle,
   IconData icon,
   VoidCallback onTap,
-) =>
-    Builder(
-      builder: (context) {
-        final scheme = Theme.of(context).colorScheme;
-        return ListTile(
-          onTap: onTap,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: AppSpacing.xs,
-          ),
-          leading: _IconChip(icon: icon, color: scheme.primary, size: 40),
-          title: Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Text(
-            subtitle,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-          trailing: Icon(Icons.chevron_right, color: scheme.outline),
-        );
-      },
+) => Builder(
+  builder: (context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListTile(
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.xs,
+      ),
+      leading: _IconChip(icon: icon, color: scheme.primary, size: 40),
+      title: Text(
+        title,
+        style: Theme.of(context).textTheme.titleSmall
+            ?.copyWith(fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: Theme.of(context).textTheme.bodySmall
+            ?.copyWith(color: scheme.onSurfaceVariant),
+      ),
+      trailing: Icon(Icons.chevron_right, color: scheme.outline),
     );
+  },
+);
 
 /// Horizontal-scroll chip used for animation demos.
 Widget animChip(String label, VoidCallback onTap) => Padding(
-      padding: const EdgeInsets.only(right: AppSpacing.sm),
-      child: Builder(
-        builder: (context) => ActionChip(label: Text(label), onPressed: onTap),
-      ),
-    );
+  padding: const EdgeInsets.only(right: AppSpacing.sm),
+  child: Builder(
+    builder: (context) => ActionChip(label: Text(label), onPressed: onTap),
+  ),
+);
 
 /// A gradient-tinted rounded icon chip — the recurring accent-color motif
 /// used across cards, hub screens, and category app bars.
@@ -294,8 +285,11 @@ class CategoryCard extends StatelessWidget {
 /// A collapsible "View code" panel showing the Dart snippet behind a demo,
 /// with a one-tap copy-to-clipboard button.
 class CodeSnippet extends StatefulWidget {
-  const CodeSnippet(
-      {super.key, required this.code, this.initiallyExpanded = false});
+  const CodeSnippet({
+    super.key,
+    required this.code,
+    this.initiallyExpanded = false,
+  });
 
   final String code;
   final bool initiallyExpanded;
@@ -395,8 +389,9 @@ class _CodeSnippetState extends State<CodeSnippet> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         const SnackBar(
-            content: Text('Copied to clipboard'),
-            duration: Duration(seconds: 1)),
+          content: Text('Copied to clipboard'),
+          duration: Duration(seconds: 1),
+        ),
       );
   }
 }
@@ -440,11 +435,7 @@ class CategoryScaffold extends StatelessWidget {
                   ),
                   child: Text(
                     subtitle!,
-                    style: Theme.of(
-                      context,
-                    )
-                        .textTheme
-                        .bodySmall
+                    style: Theme.of(context).textTheme.bodySmall
                         ?.copyWith(color: scheme.onSurfaceVariant),
                   ),
                 ),

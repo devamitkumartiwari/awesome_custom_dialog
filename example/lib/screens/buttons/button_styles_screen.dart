@@ -128,8 +128,9 @@ class ButtonStylesScreen extends StatelessWidget {
       ..oneButton(
         text: 'Upgrade',
         color: Colors.white,
-        gradient:
-            const LinearGradient(colors: [Colors.purple, Colors.pinkAccent]),
+        gradient: const LinearGradient(
+          colors: [Colors.purple, Colors.pinkAccent],
+        ),
         borderRadius: BorderRadius.circular(14),
       )
       ..show();

@@ -56,7 +56,10 @@ ACDRatingBar(
           itemBuilder: (context, index, fillFraction, status) => Icon(
             Icons.local_fire_department,
             color: Color.lerp(
-                Colors.grey.shade300, Colors.deepOrange, fillFraction),
+              Colors.grey.shade300,
+              Colors.deepOrange,
+              fillFraction,
+            ),
           ),
         ),
         const SizedBox(height: 24),

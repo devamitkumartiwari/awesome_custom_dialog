@@ -175,7 +175,9 @@ class _ACDToastStackState extends State<ACDToastStack>
           animatedFunc:
               c.config.exitAnimatedFunc ??
               c.config.animatedFunc ??
-              (exitAnim != null ? acdToastPresetAnimFn(exitAnim) : null),
+              (exitAnim != null
+                  ? acdToastPresetAnimFn(exitAnim, direction)
+                  : null),
           child: ACDToastCard(
             controller: c,
             config: c.config,

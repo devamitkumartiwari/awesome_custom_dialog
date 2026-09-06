@@ -27,6 +27,8 @@ A simple, flexible way to show dialogs, toasts, snackbars, autocomplete fields, 
   14. [Motion & Animated Text](#14-motion--animated-text)
   15. [Percent & Loading Indicators](#15-percent--loading-indicators)
   16. [Pin / OTP Field](#16-pin--otp-field)
+  17. [Staggered Lists & Grids](#17-staggered-lists--grids)
+  18. [Dialog Styling & Content Stagger](#18-dialog-styling--content-stagger)
 - [🍞 Toast](#-toast)
 - [🍫 Snackbar](#-snackbar)
 - [🎨 Customizing Everything](#-customizing-everything)
@@ -44,7 +46,7 @@ Add this to your package's `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  awesome_custom_dialog: ^1.5.0
+  awesome_custom_dialog: ^1.6.0
 ```
 
 ---
@@ -52,6 +54,9 @@ dependencies:
 ## 📖 Usage Examples
 
 ### 1. Simple Success Preset
+
+![Success preset](doc/gifs/success-preset.gif)
+
 ```dart
 ACDDialog().build(context)
   ..success(
@@ -63,6 +68,9 @@ ACDDialog().build(context)
 ```
 
 ### 2. Custom Dialog with List
+
+![Custom dialog with list](doc/gifs/custom-dialog-list.gif)
+
 ```dart
 ACDDialog().build(context)
   ..width = 300
@@ -89,6 +97,9 @@ ACDDialog.toast(
 ```
 
 ### 4. Custom Animation and Position
+
+![Custom animation and position](doc/gifs/custom-animation-position.gif)
+
 ```dart
 ACDDialog().build(context)
   ..gravity = ACDGravity.bottom
@@ -99,6 +110,9 @@ ACDDialog().build(context)
 ```
 
 ### 5. Text Field with Validation
+
+![Text field with validation](doc/gifs/text-field-validation.gif)
+
 `acdTextField()`'s `validator` is optional — add it only if you need it:
 ```dart
 final fieldKey = GlobalKey<FormFieldState<String>>();
@@ -123,6 +137,9 @@ dialog
 ```
 
 ### 6. Searchable List
+
+![Searchable list](doc/gifs/searchable-list.gif)
+
 ```dart
 ACDDialog().build(context)
   ..height = 400
@@ -136,6 +153,8 @@ ACDDialog().build(context)
 Pass your own model type instead of `String` for typed selections (`itemAsString` extracts the label, `itemBuilder` fully customizes each row), or use `.multiSearchableList<T>()` for a multi-select version with a built-in Confirm/Cancel row. Supply `onFind` on either to delegate non-empty queries to your own async/remote search instead of filtering `items` locally.
 
 ### 7. Dropdown Field
+
+![Dropdown field](doc/gifs/dropdown-field.gif)
 
 `searchableList()` above only works as content inside an already-open `ACDDialog`. `ACDDropdownField<T>` is the inline counterpart — a real `FormField<T>`, so it drops straight into a `Form` with a `validator`, sits next to your other fields, and shows the current selection itself.
 
@@ -232,6 +251,8 @@ ACDDropdownField<String>(
 
 ### 8. Autocomplete
 
+![Autocomplete](doc/gifs/autocomplete.gif)
+
 `ACDAutocompleteField<T>` is a standalone typeahead text field — generic over your item type, with local or remote suggestion matching:
 ```dart
 ACDAutocompleteField<String>(
@@ -257,6 +278,8 @@ ACDTriggerAutocompleteField(
 Each trigger's `optionsBuilder(query)` is its own async lookup, so `@` and `#` can search entirely different data sources. `triggerOnlyAtStart`/`triggerOnlyAfterSpace` control when a trigger arms, and `minCharsForSuggestions` sets how many characters must follow it first.
 
 ### 9. Slide to Confirm
+
+![Slide to confirm](doc/gifs/slide-to-confirm.gif)
 
 `ACDSlideAction` requires a deliberate drag gesture before firing an action — useful anywhere an accidental tap shouldn't be enough (payments, deletions, unlocking):
 ```dart
@@ -292,6 +315,8 @@ Both constructors share the same full customization surface — shape (`ACDSlide
 
 ### 10. Dashed and Dotted Decoration
 
+![Dashed and dotted decoration](doc/gifs/dashed-dotted.gif)
+
 `ACDDashedLine` draws a standalone dashed/dotted line, horizontal or vertical:
 ```dart
 ACDDashedLine(length: 200, color: Colors.grey, dashLength: 6, gapLength: 4)
@@ -317,6 +342,8 @@ ACDDashedBorder(
 `shape` also supports `.rect`, `.oval`, `.circle`, and `.customPath` (pass `customPathBuilder: (size) => Path()...` for an arbitrary outline).
 
 ### 11. Stepper
+
+![Stepper](doc/gifs/stepper.gif)
 
 `ACDStepper` is a compact step-progress indicator — a horizontal wizard bar by default:
 ```dart
@@ -345,6 +372,8 @@ ACDStepperListView<String>(
 
 ### 12. Switch
 
+![Switch](doc/gifs/switch.gif)
+
 `ACDSwitch` is a fully customizable, dependency-free toggle:
 ```dart
 ACDSwitch(
@@ -359,6 +388,8 @@ Works controlled (`value`/`onChanged`, like `Checkbox`), uncontrolled (`initialV
 
 ### 13. Rating Bar
 
+![Rating bar](doc/gifs/rating-bar.gif)
+
 `ACDRatingBar` is a fully customizable, dependency-free rating bar:
 ```dart
 ACDRatingBar(
@@ -372,6 +403,8 @@ ACDRatingBar(
 ---
 
 ### 14. Motion & Animated Text
+
+![Motion and animated text](doc/gifs/motion-animated-text.gif)
 
 `ACDMotion` wraps any widget with entrance/exit/rest/tap effects, sharing one `ACDMotionEffect` vocabulary (opacity, offset, scale, rotation, skew, blur):
 ```dart
@@ -395,6 +428,8 @@ Flip `visible` to `false` to play `exitEffect` (defaults to `effect` reversed) i
 ---
 
 ### 15. Percent & Loading Indicators
+
+![Percent and loading indicators](doc/gifs/percent-indicators.gif)
 
 `ACDLinearPercentIndicator` and `ACDCircularPercentIndicator` are fully customizable, dependency-free progress indicators:
 ```dart
@@ -429,6 +464,8 @@ ACDMultiSegmentLinearIndicator(
 
 ### 16. Pin / OTP Field
 
+![Pin and OTP field](doc/gifs/pin-field.gif)
+
 `ACDPinField` is a dependency-free PIN/OTP input, built around one real (invisible) `TextField` so selection, cursor, IME, paste, and autofill are all Flutter's own native behavior — not reimplemented:
 ```dart
 ACDPinField(
@@ -441,7 +478,56 @@ Drop it straight into a `Form` — it's a real `FormField<String>`, so `validato
 
 ---
 
+### 17. Staggered Lists & Grids
+
+![Staggered list](doc/gifs/staggered-list.gif)
+
+`ACDStaggeredList`/`ACDStaggeredGrid` (plus `ACDStaggeredSliverList`/`ACDStaggeredSliverGrid` for composing inside a `CustomScrollView`) give every row/cell a staggered entrance, delayed by index — a dependency-free alternative to reaching for a separate animated-list package:
+```dart
+ACDStaggeredList(
+  itemCount: fruits.length,
+  options: const ACDStaggerOptions(interval: Duration(milliseconds: 90)),
+  itemBuilder: (context, index) => ListTile(title: Text(fruits[index])),
+)
+```
+Toggle `visible` to `false` to play a staggered exit (last-in-first-out by default) instead of unmounting immediately, and use `ACDStaggerOptions` (`interval`, `itemDuration`, `curve`, `effect`, `exitEffect`, `reverseOnExit`) to fully control the timing and per-item `ACDMotionEffect` — including the RTL-aware `ACDMotionEffect.slideInFromStart(context)`/`slideInFromEnd(context)`.
+
+![Staggered grid](doc/gifs/staggered-grid.gif)
+
+`ACDStaggeredGrid` takes the same `ACDStaggerOptions` plus a `gridDelegate`:
+```dart
+ACDStaggeredGrid(
+  itemCount: items.length,
+  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3),
+  options: const ACDStaggerOptions(interval: Duration(milliseconds: 60)),
+  itemBuilder: (context, index) => MyTile(items[index]),
+)
+```
+
+### 18. Dialog Styling & Content Stagger
+
+![Dialog styling](doc/gifs/dialog-styling.gif)
+
+`ACDDialog` supports a full custom `shape` (any `ShapeBorder` — pill, notched, superellipse, beveled...), `elevation`/`shadowColor`/`boxShadow`, `backgroundGradient`, and `backgroundImage`, on top of the existing `backgroundColor`/`borderRadius`/`decoration`. Set `contentStagger` to animate every top-level widget added to the dialog in one after another instead of all at once:
+```dart
+ACDDialog().build(context)
+  ..shape = const RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(28))
+  ..elevation = 16
+  ..backgroundGradient = const LinearGradient(
+    colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+  )
+  ..contentStagger = const ACDStaggerOptions()
+  ..text(text: "Styled dialog", color: Colors.white)
+  ..oneButton(text: "Nice")
+  ..show();
+```
+`listOfACDListTile()`/`listOfACDRadioButton()`/`listOfACDCheckbox()` each take a matching `stagger` parameter for the rows they render.
+
+---
+
 ## 🍞 Toast
+
+![Toast](doc/gifs/toast.gif)
 
 A small message that appears briefly and disappears on its own — like a native Android toast, but on any platform. It never blocks taps on the rest of your app, stacks multiple toasts cleanly, and is fully customizable: colors, gradients, borders, shapes, corner radius, styles, animations, progress bar, drag-to-dismiss, and more.
 
@@ -525,6 +611,8 @@ You can position a toast anywhere using `gravity` — top, bottom, center, or an
 ---
 
 ## 🍫 Snackbar
+
+![Snackbar](doc/gifs/snackbar.gif)
 
 A colorful banner for success, failure, warning, or help messages. Use it as a standalone widget inside Flutter's own `SnackBar`:
 

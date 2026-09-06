@@ -69,8 +69,10 @@ ACDPinField(
                   borderColor: Colors.green,
                   borderWidth: 2,
                 ),
-                errorPinTheme:
-                    ACDPinTheme(borderColor: scheme.error, borderWidth: 2),
+                errorPinTheme: ACDPinTheme(
+                  borderColor: scheme.error,
+                  borderWidth: 2,
+                ),
               ),
               const SizedBox(height: 12),
               ElevatedButton(
@@ -104,8 +106,10 @@ ACDPinField(
               ),
             ],
           ),
-          focusedPinTheme:
-              ACDPinTheme(borderColor: scheme.primary, borderWidth: 2),
+          focusedPinTheme: ACDPinTheme(
+            borderColor: scheme.primary,
+            borderWidth: 2,
+          ),
         ),
         const CodeSnippet(
           code: '''

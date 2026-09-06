@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../motion/acd_motion.dart';
+import '../motion/acd_stagger_options.dart';
+
 /// One option for `ACDDialog.listOfACDCheckbox()`.
 class ACDCheckboxItem {
   /// Creates an [ACDCheckboxItem].
@@ -66,10 +69,15 @@ class ACDCheckboxListTile extends StatefulWidget {
     this.controller,
     this.onChanged,
     this.borderRadius,
+    this.stagger,
   });
 
   /// The selectable options.
   final List<ACDCheckboxItem>? items;
+
+  /// Entrance-only stagger for these rows. `null` (the default) keeps
+  /// today's unanimated behavior.
+  final ACDStaggerOptions? stagger;
 
   /// Indices checked initially.
   final List<int>? initialValues;
@@ -115,7 +123,7 @@ class _ACDCheckboxListTileState extends State<ACDCheckboxListTile> {
       itemCount: widget.items?.length ?? 0,
       itemBuilder: (BuildContext context, int index) {
         final item = widget.items![index];
-        return Material(
+        final Widget tile = Material(
           color: widget.color,
           child: CheckboxListTile(
             title: Text(
@@ -155,6 +163,21 @@ class _ACDCheckboxListTileState extends State<ACDCheckboxListTile> {
               widget.onChanged?.call(_selected.toList()..sort());
             },
           ),
+        );
+        final ACDStaggerOptions? stagger = widget.stagger;
+        if (stagger == null) return tile;
+        return ACDMotion(
+          key: ValueKey<int>(index),
+          delay: stagger.delayForIndex(
+            index,
+            widget.items?.length ?? 0,
+            visible: true,
+          ),
+          duration: stagger.itemDuration,
+          curve: stagger.curve,
+          effect: stagger.effect,
+          exitEffect: stagger.exitEffect,
+          child: tile,
         );
       },
     );

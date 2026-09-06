@@ -20,9 +20,9 @@ class SwitchHubScreen extends StatelessWidget {
           subtitle: 'Controlled, uncontrolled, controller, .material/.ios',
           icon: Icons.toggle_on_outlined,
           color: Colors.cyan,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const SwitchBasicsScreen()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const SwitchBasicsScreen())),
         ),
         const SizedBox(height: AppSpacing.sm),
         CategoryCard(
@@ -32,7 +32,8 @@ class SwitchHubScreen extends StatelessWidget {
           color: Colors.cyan,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(
-                builder: (_) => const SwitchStylingGalleryScreen()),
+              builder: (_) => const SwitchStylingGalleryScreen(),
+            ),
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
@@ -43,7 +44,8 @@ class SwitchHubScreen extends StatelessWidget {
           color: Colors.cyan,
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(
-                builder: (_) => const SwitchCustomBuilderScreen()),
+              builder: (_) => const SwitchCustomBuilderScreen(),
+            ),
           ),
         ),
       ],

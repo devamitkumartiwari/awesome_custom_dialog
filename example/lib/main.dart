@@ -10,8 +10,9 @@ void main() => runApp(const MyApp());
 
 /// Lets [HomeScreen] cycle the app's theme mode (light → dark → system) from
 /// its app bar without lifting a `StatefulWidget` all the way up manually.
-final ValueNotifier<ThemeMode> themeModeNotifier =
-    ValueNotifier(ThemeMode.system);
+final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(
+  ThemeMode.system,
+);
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});

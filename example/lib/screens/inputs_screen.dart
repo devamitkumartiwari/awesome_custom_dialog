@@ -118,11 +118,17 @@ ACDDialog().build(context)
         height: 240,
         items: const [
           ACDListTileItem(
-              leading: Icon(Icons.edit_outlined), text: 'Edit Item'),
+            leading: Icon(Icons.edit_outlined),
+            text: 'Edit Item',
+          ),
           ACDListTileItem(
-              leading: Icon(Icons.share_outlined), text: 'Share Project'),
+            leading: Icon(Icons.share_outlined),
+            text: 'Share Project',
+          ),
           ACDListTileItem(
-              leading: Icon(Icons.copy_all_outlined), text: 'Duplicate'),
+            leading: Icon(Icons.copy_all_outlined),
+            text: 'Duplicate',
+          ),
           ACDListTileItem(
             leading: Icon(Icons.delete_outline, color: Colors.red),
             text: 'Move to Trash',
@@ -155,9 +161,10 @@ ACDDialog().build(context)
       )
       ..acdDivider()
       ..oneButton(
-          text: 'Apply Changes',
-          color: Colors.teal,
-          fontWeight: FontWeight.bold)
+        text: 'Apply Changes',
+        color: Colors.teal,
+        fontWeight: FontWeight.bold,
+      )
       ..show();
   }
 

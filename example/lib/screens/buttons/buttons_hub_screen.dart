@@ -29,9 +29,9 @@ class ButtonsHubScreen extends StatelessWidget {
           subtitle: 'Background color, gradient, elevation, icon, shape',
           icon: Icons.palette_outlined,
           color: Colors.indigo,
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ButtonStylesScreen()),
-          ),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ButtonStylesScreen())),
         ),
       ],
     );

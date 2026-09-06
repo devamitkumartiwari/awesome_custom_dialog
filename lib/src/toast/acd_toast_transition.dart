@@ -42,7 +42,11 @@ class ACDToastTransition extends StatelessWidget {
 /// mirroring `acdPresetAnimFn` (`lib/src/core/acd_animation.dart`) but kept
 /// toast-local since exit-direction presets (e.g. mirroring `slideUp` on the
 /// way out) are specific to this two-directional use.
-Function(Widget, Animation<double>) acdToastPresetAnimFn(ACDAnimation anim) {
+Function(Widget, Animation<double>) acdToastPresetAnimFn(
+  ACDAnimation anim, [
+  TextDirection textDirection = TextDirection.ltr,
+]) {
+  final bool rtl = textDirection == TextDirection.rtl;
   return switch (anim) {
     ACDAnimation.none => (child, _) => child,
     ACDAnimation.fade => (child, anim) => FadeTransition(
@@ -73,14 +77,14 @@ Function(Widget, Animation<double>) acdToastPresetAnimFn(ACDAnimation anim) {
     ),
     ACDAnimation.slideLeft => (child, anim) => SlideTransition(
       position: Tween<Offset>(
-        begin: const Offset(1, 0),
+        begin: Offset(rtl ? -1 : 1, 0),
         end: Offset.zero,
       ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
       child: FadeTransition(opacity: anim, child: child),
     ),
     ACDAnimation.slideRight => (child, anim) => SlideTransition(
       position: Tween<Offset>(
-        begin: const Offset(-1, 0),
+        begin: Offset(rtl ? 1 : -1, 0),
         end: Offset.zero,
       ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
       child: FadeTransition(opacity: anim, child: child),

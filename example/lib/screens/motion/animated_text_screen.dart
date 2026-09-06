@@ -18,9 +18,8 @@ class _MotionAnimatedTextScreenState extends State<MotionAnimatedTextScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(
-      context,
-    ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold);
+    final style = Theme.of(context).textTheme.headlineSmall
+        ?.copyWith(fontWeight: FontWeight.bold);
 
     return CategoryScaffold(
       title: 'Animated text',

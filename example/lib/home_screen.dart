@@ -253,10 +253,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   IconData get _themeIcon => switch (themeModeNotifier.value) {
-        ThemeMode.light => Icons.light_mode_outlined,
-        ThemeMode.dark => Icons.dark_mode_outlined,
-        ThemeMode.system => Icons.brightness_auto_outlined,
-      };
+    ThemeMode.light => Icons.light_mode_outlined,
+    ThemeMode.dark => Icons.dark_mode_outlined,
+    ThemeMode.system => Icons.brightness_auto_outlined,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -289,7 +289,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
             flexibleSpace: FlexibleSpaceBar(
               titlePadding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
+                AppSpacing.lg,
+                0,
+                AppSpacing.lg,
+                AppSpacing.md,
+              ),
               title: Text(
                 'Awesome Custom Dialog',
                 style: theme.textTheme.titleLarge?.copyWith(
@@ -352,34 +356,32 @@ class _HomeScreenState extends State<HomeScreen> {
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
             sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final _GroupInfo info = _groupInfos[index];
-                  final int count =
-                      _categories.where((c) => c.group == info.title).length;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                    child: CategoryCard(
-                      title: info.title,
-                      subtitle: '${info.subtitle} · $count features',
-                      icon: info.icon,
-                      color: info.color,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => _GroupScreen(
-                            title: info.title,
-                            color: info.color,
-                            categories: _categories
-                                .where((c) => c.group == info.title)
-                                .toList(),
-                          ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final _GroupInfo info = _groupInfos[index];
+                final int count = _categories
+                    .where((c) => c.group == info.title)
+                    .length;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  child: CategoryCard(
+                    title: info.title,
+                    subtitle: '${info.subtitle} · $count features',
+                    icon: info.icon,
+                    color: info.color,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => _GroupScreen(
+                          title: info.title,
+                          color: info.color,
+                          categories: _categories
+                              .where((c) => c.group == info.title)
+                              .toList(),
                         ),
                       ),
                     ),
-                  );
-                },
-                childCount: _groupInfos.length,
-              ),
+                  ),
+                );
+              }, childCount: _groupInfos.length),
             ),
           ),
           const SliverPadding(padding: EdgeInsets.only(bottom: AppSpacing.xl)),
@@ -407,7 +409,7 @@ class _HomeScreenState extends State<HomeScreen> {
       )
       ..text(
         padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-        text: 'v1.5.0 • MIT License',
+        text: 'v1.6.0 • MIT License',
         color: Colors.black38,
         alignment: Alignment.center,
       )
@@ -440,7 +442,9 @@ class _GroupScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-          title: Text(title), backgroundColor: color.withValues(alpha: 0.08)),
+        title: Text(title),
+        backgroundColor: color.withValues(alpha: 0.08),
+      ),
       body: ListView.separated(
         padding: const EdgeInsets.all(AppSpacing.lg),
         itemCount: categories.length,
@@ -452,9 +456,9 @@ class _GroupScreen extends StatelessWidget {
             subtitle: category.subtitle,
             icon: category.icon,
             color: category.color,
-            onTap: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: category.builder)),
+            onTap: () =>
+                Navigator.of(context)
+                    .push(MaterialPageRoute(builder: category.builder)),
           );
         },
       ),

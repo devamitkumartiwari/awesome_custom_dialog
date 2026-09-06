@@ -80,7 +80,10 @@ ACDDialog().build(context)
         color: Colors.black54,
       )
       ..oneButton(
-          text: 'Got it', color: Colors.teal, fontWeight: FontWeight.bold)
+        text: 'Got it',
+        color: Colors.teal,
+        fontWeight: FontWeight.bold,
+      )
       ..show();
   }
 

@@ -6,3 +6,8 @@ export 'acd_motion_rest_effect.dart';
 export 'acd_motion_sequence.dart';
 export 'acd_motion_sequence_trigger.dart';
 export 'acd_rest_effect_config.dart';
+export 'acd_stagger_options.dart';
+export 'acd_staggered_grid.dart';
+export 'acd_staggered_list.dart';
+export 'acd_staggered_sliver_grid.dart';
+export 'acd_staggered_sliver_list.dart';

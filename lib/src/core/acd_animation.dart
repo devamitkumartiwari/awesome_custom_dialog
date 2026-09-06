@@ -32,7 +32,17 @@ enum ACDAnimation {
 }
 
 // FEAT-08: map enum to animation function
-Function(Widget, Animation<double>) acdPresetAnimFn(ACDAnimation anim) {
+//
+// textDirection resolves slideLeft/slideRight to "visual start"/"visual end"
+// under RTL, matching acdResolveGravityForDirection's mirroring of
+// left/right-flavored gravities — without this, a dialog's slide-in
+// direction would silently disagree with its (already RTL-aware) docking
+// side under right-to-left locales.
+Function(Widget, Animation<double>) acdPresetAnimFn(
+  ACDAnimation anim, [
+  TextDirection textDirection = TextDirection.ltr,
+]) {
+  final bool rtl = textDirection == TextDirection.rtl;
   switch (anim) {
     case ACDAnimation.fade:
       return (child, anim) => FadeTransition(opacity: anim, child: child);
@@ -76,7 +86,7 @@ Function(Widget, Animation<double>) acdPresetAnimFn(ACDAnimation anim) {
     case ACDAnimation.slideLeft:
       return (child, anim) => SlideTransition(
         position: Tween<Offset>(
-          begin: const Offset(1, 0),
+          begin: Offset(rtl ? -1 : 1, 0),
           end: Offset.zero,
         ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
         child: child,
@@ -85,7 +95,7 @@ Function(Widget, Animation<double>) acdPresetAnimFn(ACDAnimation anim) {
     case ACDAnimation.slideRight:
       return (child, anim) => SlideTransition(
         position: Tween<Offset>(
-          begin: const Offset(-1, 0),
+          begin: Offset(rtl ? 1 : -1, 0),
           end: Offset.zero,
         ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
         child: child,

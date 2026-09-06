@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../motion/acd_motion.dart';
+import '../motion/acd_stagger_options.dart';
+
 /// One option for `ACDDialog.listOfACDRadioButton()`.
 class ACDRadioItem {
   /// Creates an [ACDRadioItem].
@@ -70,10 +73,15 @@ class ACDRadioListTile extends StatefulWidget {
     this.controller,
     this.onChanged,
     this.borderRadius,
+    this.stagger,
   });
 
   /// The selectable options.
   final List<ACDRadioItem>? items;
+
+  /// Entrance-only stagger for these rows. `null` (the default) keeps
+  /// today's unanimated behavior.
+  final ACDStaggerOptions? stagger;
 
   /// Index selected initially.
   final int? initialValue;
@@ -131,7 +139,7 @@ class _ACDRadioListTileState extends State<ACDRadioListTile> {
         itemCount: widget.items?.length ?? 0,
         itemBuilder: (BuildContext context, int index) {
           final item = widget.items![index];
-          return Material(
+          final Widget tile = Material(
             color: widget.color,
             child: RadioListTile<int>(
               title: Text(
@@ -160,6 +168,21 @@ class _ACDRadioListTileState extends State<ACDRadioListTile> {
                   ? null
                   : RoundedRectangleBorder(borderRadius: widget.borderRadius!),
             ),
+          );
+          final ACDStaggerOptions? stagger = widget.stagger;
+          if (stagger == null) return tile;
+          return ACDMotion(
+            key: ValueKey<int>(index),
+            delay: stagger.delayForIndex(
+              index,
+              widget.items?.length ?? 0,
+              visible: true,
+            ),
+            duration: stagger.itemDuration,
+            curve: stagger.curve,
+            effect: stagger.effect,
+            exitEffect: stagger.exitEffect,
+            child: tile,
           );
         },
       ),
