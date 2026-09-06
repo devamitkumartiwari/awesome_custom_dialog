@@ -64,9 +64,10 @@ void main() {
     for (int i = 0; i < 6; i++) {
       await capture.pumpAndCapture(const Duration(milliseconds: 60));
     }
-    await capture.hold(4);
-    await tester.tap(find.text('Option 2'));
-    await capture.pumpAndCapture(const Duration(milliseconds: 100));
-    await capture.hold(4);
+    // Settle and hold on the fully-shown, fully-dimmed state — stop short
+    // of tapping an option, since with no exit animation configured the
+    // barrier fades out faster than the card during dismiss, leaving a
+    // briefly undimmed floating card that looks broken on loop.
+    await capture.hold(14);
   });
 }

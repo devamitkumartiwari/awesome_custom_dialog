@@ -23,12 +23,13 @@ void main() {
             backgroundColor: Colors.grey.shade100,
             body: Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: StatefulBuilder(
                   builder: (context, setState) => ACDStepper(
                     steps: const ['Cart', 'Address', 'Payment', 'Done'],
                     activeStep: currentStep,
                     onStepReached: (i) => setState(() => currentStep = i),
+                    titleStyle: const TextStyle(fontSize: 11.5),
                   ),
                 ),
               ),

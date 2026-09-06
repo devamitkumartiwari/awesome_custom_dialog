@@ -36,21 +36,24 @@ void main() {
                       ..contentStagger = const ACDStaggerOptions(
                         interval: Duration(milliseconds: 90),
                       )
-                      ..width = 280
+                      ..width = 300
                       ..text(
+                        padding: const EdgeInsets.fromLTRB(20, 22, 20, 6),
                         text: 'Styled dialog',
                         color: Colors.white,
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                       )
                       ..text(
-                        text: 'shape, elevation, gradient & contentStagger',
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
+                        text: 'Shape, elevation, gradient\n& content stagger',
                         color: Colors.white70,
                       )
                       ..oneButton(
                         text: 'Nice',
                         backgroundColor: Colors.white,
                         color: const Color(0xFF6A11CB),
+                        buttonPadding: const EdgeInsets.fromLTRB(24, 0, 24, 22),
                       )
                       ..show();
                   },

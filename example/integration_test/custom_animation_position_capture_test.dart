@@ -30,7 +30,16 @@ void main() {
                       ..gravity = ACDGravity.bottom
                       ..animation = ACDAnimation.slideUp
                       ..borderRadius = 20
-                      ..text(text: 'I slid up from the bottom!')
+                      ..width = 320
+                      ..margin = const EdgeInsets.fromLTRB(20, 0, 20, 40)
+                      ..text(
+                        text: 'I slid up from the bottom!',
+                        alignment: Alignment.center,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 18,
+                        ),
+                      )
                       ..show();
                   },
                   child: const Text('Show Dialog'),

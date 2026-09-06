@@ -30,8 +30,22 @@ void main() {
                   children: [
                     ACDLinearPercentIndicator(
                       controller: linear,
+                      lineHeight: 28,
+                      barRadius: const Radius.circular(14),
                       progressColor: Colors.blue,
+                      backgroundColor: Colors.blueGrey.shade300,
                       showPercentageText: true,
+                      // Pin an explicit fontSize well under lineHeight so the
+                      // label is fully contained within the bar — the
+                      // default auto-size (lineHeight * 1.5) is deliberately
+                      // larger than the bar and relies on overflowing above/
+                      // below it, which only reads well when the text color
+                      // also contrasts with whatever is *behind* the bar.
+                      percentageTextStyle: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 32),
                     ACDCircularPercentIndicator(
