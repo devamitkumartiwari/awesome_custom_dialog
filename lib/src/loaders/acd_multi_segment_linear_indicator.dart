@@ -1,7 +1,10 @@
 import 'dart:ui' show lerpDouble;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../design/acd_design.dart';
+import '../design/internal/acd_platform_support.dart';
+import 'acd_loader_design.dart';
 import 'acd_loader_paint.dart';
 import 'acd_loader_segment.dart';
 import 'acd_loader_stroke_cap.dart';
@@ -46,6 +49,7 @@ class ACDMultiSegmentLinearIndicator extends StatefulWidget {
     this.animationDuration = const Duration(milliseconds: 500),
     this.animationCurve = Curves.linear,
     this.onAnimationEnd,
+    this.design,
   });
 
   /// The segments to render, left to right.
@@ -118,6 +122,10 @@ class ACDMultiSegmentLinearIndicator extends StatefulWidget {
 
   /// Fires once every segment's fill animation finishes.
   final VoidCallback? onAnimationEnd;
+
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign]. Picks the
+  /// default track (dark-mode aware) and, for Cupertino, the default fill.
+  final ACDDesign? design;
 
   @override
   State<ACDMultiSegmentLinearIndicator> createState() =>
@@ -258,12 +266,12 @@ class _ACDMultiSegmentLinearIndicatorState
               _keyFor(i, segment),
               segment.percent.clamp(0.0, 1.0),
             ),
-            color: segment.color,
+            color: segment.color ?? (_cupertino ? _defaults.progress : null),
             gradient: segment.gradient,
             backgroundColor:
                 segment.backgroundColor ??
                 widget.backgroundColor ??
-                const Color(0xFFB8C7CB),
+                _defaults.track,
             backgroundGradient:
                 segment.backgroundGradient ?? widget.backgroundGradient,
             borderColor: segment.borderColor ?? widget.borderColor,
@@ -280,15 +288,34 @@ class _ACDMultiSegmentLinearIndicatorState
     );
   }
 
+  // Default colors, resolved once per build (not per segment/frame).
+  ({Color track, Color progress}) _defaults = (
+    track: const Color(0xFFB8C7CB),
+    progress: const Color(0xFF2962FF),
+  );
+  bool _cupertino = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Marching stripes loop forever: honour reduce motion.
+    final AnimationController? stripes = _stripeController;
+    if (stripes == null) return;
+    if (acdReduceMotion(context)) {
+      stripes.stop();
+    } else if (!stripes.isAnimating) {
+      stripes.repeat();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    _cupertino = ACDDesign.resolve(context, widget.design).isCupertino;
+    _defaults = acdLoaderDefaults(context, widget.design);
     Widget content = Padding(
       padding: widget.padding,
       child: AnimatedBuilder(
-        animation: Listenable.merge([
-          _fillController,
-          if (_stripeController != null) _stripeController!,
-        ]),
+        animation: Listenable.merge([_fillController, ?_stripeController]),
         builder: (context, _) {
           final Widget row = Row(
             mainAxisSize: widget.width == null

@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show listEquals;
+import 'package:material_ui/material_ui.dart';
 
 import 'acd_dash_path.dart';
 import 'acd_dashed_border_shape.dart';
@@ -145,6 +146,8 @@ class _ACDDashedBorderPainter extends CustomPainter {
       oldDelegate.strokeWidth != strokeWidth ||
       oldDelegate.color != color ||
       oldDelegate.gradient != gradient ||
-      oldDelegate.dashPattern != dashPattern ||
+      // Compare contents: a non-const pattern list is a new instance on
+      // every rebuild and would otherwise repaint every time.
+      !listEquals(oldDelegate.dashPattern, dashPattern) ||
       oldDelegate.roundedCaps != roundedCaps;
 }

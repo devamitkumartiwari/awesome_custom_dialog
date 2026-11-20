@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Built-in entrance/exit transitions for [ACDDialog], [ACDDialog.toast],
 /// and [ACDDialog.snackbar]. Assign to `ACDDialog.animation`.

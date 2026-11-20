@@ -1,5 +1,5 @@
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -212,4 +212,42 @@ void main() {
     ACDToastManager.dismissAll();
     await tester.pumpAndSettle();
   });
+
+  testWidgets(
+    'exitAnimation only affects the exit — the entrance keeps animation '
+    '(regression: the exit preset used to replace the entrance too)',
+    (tester) async {
+      await tester.pumpWidget(
+        wrap((context) {
+          ACDDialog.toast(
+            context: context,
+            message: 'Phased',
+            animation: ACDAnimation.scale,
+            exitAnimation: ACDAnimation.slideDown,
+            showDuration: const Duration(seconds: 1),
+          ).show();
+        }),
+      );
+      Finder inToast(Type t) =>
+          find.ancestor(of: find.text('Phased'), matching: find.byType(t));
+
+      await tester.tap(find.text('Open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100)); // mid-entrance
+      expect(inToast(ScaleTransition), findsWidgets);
+      expect(inToast(SlideTransition), findsNothing);
+
+      // Advance until the auto-dismiss exit phase begins (its timer starts
+      // once the entrance settles), then check mid-exit.
+      bool sawSlide = false;
+      for (int i = 0; i < 40 && !sawSlide; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+        if (find.text('Phased').evaluate().isEmpty) break;
+        sawSlide = inToast(SlideTransition).evaluate().isNotEmpty;
+      }
+      expect(sawSlide, isTrue, reason: 'exit must use exitAnimation');
+
+      await tester.pumpAndSettle();
+    },
+  );
 }

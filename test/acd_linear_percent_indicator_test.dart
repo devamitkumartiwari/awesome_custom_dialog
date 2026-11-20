@@ -1,5 +1,5 @@
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -180,4 +180,43 @@ void main() {
     );
     expect(opacity.opacity, 0.3);
   });
+
+  testWidgets(
+    'retargeting mid-animation detaches the superseded tween (regression: '
+    'its listener leaked and kept reporting stale values)',
+    (tester) async {
+      final List<double> ticks = <double>[];
+      Widget build(double value) => wrap(
+        SizedBox(
+          width: 200,
+          child: ACDLinearPercentIndicator(
+            value: value,
+            animateFromLastPercent: true,
+            animationDuration: const Duration(milliseconds: 400),
+            animationCurve: Curves.linear,
+            onPercentChanged: ticks.add,
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(build(0));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(build(1));
+      await tester.pump(const Duration(milliseconds: 200)); // ~halfway up
+      ticks.clear();
+
+      await tester.pumpWidget(build(0)); // retarget down
+      for (int i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+
+      expect(ticks, isNotEmpty);
+      // Every tick after the retarget must head toward 0 — a leaked
+      // listener from the upward run would interleave values rising to 1.
+      for (int i = 1; i < ticks.length; i++) {
+        expect(ticks[i], lessThanOrEqualTo(ticks[i - 1]));
+      }
+      expect(ticks.last, 0);
+    },
+  );
 }

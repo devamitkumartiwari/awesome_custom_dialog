@@ -1,11 +1,11 @@
 import 'dart:async' show Completer, Timer, unawaited;
-import 'dart:math' as math;
-import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
+import '../design/internal/acd_platform_support.dart';
 import 'acd_motion_effect.dart';
+import 'acd_motion_frame.dart';
 import 'acd_pop_animation.dart';
 import 'acd_rest_effect_config.dart';
 import 'acd_rest_effect_math.dart';
@@ -159,20 +159,68 @@ class _ACDMotionState extends State<ACDMotion> with TickerProviderStateMixin {
   Timer? _entranceDelayTimer;
   Timer? _restDelayTimer;
 
+  // Reduce motion (MediaQuery.disableAnimations): entrances/exits jump to
+  // their end state (callbacks still fire) and looping rest effects never
+  // start. Read in didChangeDependencies — MediaQuery isn't readable in
+  // initState.
+  bool _reduceMotion = false;
+  bool _pendingInitialEntrance = false;
+  bool _initialized = false;
+
   @override
   void initState() {
     super.initState();
     if (widget.visible) {
       _activeEffect = widget.effect;
       if (widget.autoStart) {
-        unawaited(_playEntrance());
+        // Started from didChangeDependencies (runs synchronously right
+        // after initState), once reduce-motion is known.
+        _pendingInitialEntrance = true;
       } else {
         _controller.value = 1;
-        _maybeStartRest();
       }
     } else {
       _activeEffect = widget.exitEffect ?? widget.effect.reversed;
       _controller.value = 1;
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final bool reduce = acdReduceMotion(context);
+    final bool changed = reduce != _reduceMotion;
+    _reduceMotion = reduce;
+    if (!_initialized) {
+      _initialized = true;
+      if (_pendingInitialEntrance) {
+        _pendingInitialEntrance = false;
+        unawaited(_playEntrance());
+      } else if (widget.visible && !widget.autoStart) {
+        _maybeStartRest();
+      }
+    }
+    if (changed && reduce) {
+      _restDelayTimer?.cancel();
+      _restController
+        ..stop()
+        ..value = 0;
+    }
+  }
+
+  /// Runs the entrance/exit controller to completion; `false` if it was
+  /// interrupted (e.g. an exit superseding an entrance).
+  Future<bool> _runTransition() async {
+    _controller.duration = widget.duration;
+    if (_reduceMotion) {
+      _controller.value = 1;
+      return true;
+    }
+    try {
+      await _controller.forward(from: 0).orCancel;
+      return true;
+    } on TickerCanceled {
+      return false;
     }
   }
 
@@ -209,9 +257,8 @@ class _ACDMotionState extends State<ACDMotion> with TickerProviderStateMixin {
       if (!mounted) return;
     }
     _activeEffect = widget.effect;
-    _controller.duration = widget.duration;
-    await _controller.forward(from: 0);
-    if (!mounted) return;
+    if (_reduceMotion) setState(() {}); // repaint with the end state now
+    if (!await _runTransition() || !mounted) return;
     widget.onEntranceComplete?.call();
     _maybeStartRest();
   }
@@ -221,15 +268,14 @@ class _ACDMotionState extends State<ACDMotion> with TickerProviderStateMixin {
     _restDelayTimer?.cancel();
     _entranceDelayTimer?.cancel();
     _activeEffect = widget.exitEffect ?? widget.effect.reversed;
-    _controller.duration = widget.duration;
-    await _controller.forward(from: 0);
-    if (!mounted) return;
+    if (_reduceMotion) setState(() {});
+    if (!await _runTransition() || !mounted) return;
     widget.onExitComplete?.call();
   }
 
   void _maybeStartRest() {
     final ACDRestEffectConfig? rest = widget.restEffect;
-    if (rest == null || !mounted || !widget.visible) return;
+    if (rest == null || !mounted || !widget.visible || _reduceMotion) return;
     _restController.duration = rest.resolvedPeriod;
     _restDelayTimer?.cancel();
     void start() {
@@ -264,61 +310,33 @@ class _ACDMotionState extends State<ACDMotion> with TickerProviderStateMixin {
 
   void _handleTap() {
     if (widget.hapticFeedbackOnTap) HapticFeedback.lightImpact();
-    unawaited(_playTapEffect());
-    if (widget.onTap == null) return;
-    if (widget.deferTapCallbackUntilAnimationComplete) {
+    // Play the tap effect exactly once per tap; when deferring, chain the
+    // callback onto that same run (previously a second, restarting run was
+    // started, so the effect visibly played twice).
+    final Future<void> effect = _playTapEffect();
+    if (widget.onTap != null && widget.deferTapCallbackUntilAnimationComplete) {
       unawaited(
-        _playTapEffect().then((_) {
+        effect.then((_) {
           if (mounted) widget.onTap!();
         }),
       );
-    } else {
-      widget.onTap!();
+      return;
     }
+    unawaited(effect);
+    widget.onTap?.call();
   }
 
-  ({Matrix4 matrix, double opacity, Offset offsetFactor, Offset blur})
-  _evaluate(ACDMotionEffect effect, double t) {
-    final double opacity = ui.lerpDouble(
-      effect.beginOpacity,
-      effect.endOpacity,
-      t,
-    )!;
-    final double scale = ui.lerpDouble(effect.beginScale, effect.endScale, t)!;
-    final double rotation =
-        ui.lerpDouble(effect.beginRotationTurns, effect.endRotationTurns, t)! *
-        2 *
-        math.pi;
-    final double skewX = ui.lerpDouble(effect.beginSkewX, effect.endSkewX, t)!;
-    final double skewY = ui.lerpDouble(effect.beginSkewY, effect.endSkewY, t)!;
-    final Offset offsetFactor = Offset.lerp(
-      effect.beginOffsetFactor,
-      effect.endOffsetFactor,
-      t,
-    )!;
-    final Offset blur = Offset.lerp(
-      effect.beginBlurSigma,
-      effect.endBlurSigma,
-      t,
-    )!;
-    final Matrix4 matrix = Matrix4.identity()
-      ..rotateZ(rotation)
-      ..scaleByDouble(scale, scale, 1.0, 1.0)
-      ..setEntry(0, 1, skewX)
-      ..setEntry(1, 0, skewY);
-    return (
-      matrix: matrix,
-      opacity: opacity,
-      offsetFactor: offsetFactor,
-      blur: blur,
-    );
-  }
+  ACDMotionSample _evaluate(ACDMotionEffect effect, double t) =>
+      acdEvaluateMotion(effect, t);
 
   @override
   Widget build(BuildContext context) {
     if (widget.effectBuilder != null) {
+      // Listen to the controller directly: the builder receives the raw
+      // progress by contract, and a CurvedAnimation allocated per build
+      // would leak a status listener on _controller every rebuild.
       return AnimatedBuilder(
-        animation: CurvedAnimation(parent: _controller, curve: widget.curve),
+        animation: _controller,
         builder: (context, child) =>
             widget.effectBuilder!(context, _controller.value, child!),
         child: widget.child,
@@ -370,26 +388,12 @@ class _ACDMotionState extends State<ACDMotion> with TickerProviderStateMixin {
           );
         }
 
-        Widget result = child!;
-        if (blur.dx > 0 || blur.dy > 0) {
-          result = ImageFiltered(
-            imageFilter: ui.ImageFilter.blur(sigmaX: blur.dx, sigmaY: blur.dy),
-            child: result,
-          );
-        }
-        result = Opacity(opacity: opacity.clamp(0.0, 1.0), child: result);
-        result = Transform(
-          transform: matrix,
-          alignment: Alignment.center,
-          child: result,
-        );
-        if (offsetFactor != Offset.zero) {
-          result = FractionalTranslation(
-            translation: offsetFactor,
-            child: result,
-          );
-        }
-        return result;
+        return acdApplyMotionSample((
+          matrix: matrix,
+          opacity: opacity,
+          offsetFactor: offsetFactor,
+          blur: blur,
+        ), child!);
       },
       child: widget.child,
     );
@@ -415,6 +419,9 @@ class _ACDMotionState extends State<ACDMotion> with TickerProviderStateMixin {
       );
     }
 
+    // A looping rest effect repaints every frame: isolate it so the rest of
+    // the screen isn't repainted with it.
+    if (widget.restEffect != null) content = RepaintBoundary(child: content);
     return content;
   }
 }

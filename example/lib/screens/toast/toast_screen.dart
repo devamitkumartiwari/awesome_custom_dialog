@@ -1,5 +1,5 @@
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../widgets/showcase_widgets.dart';
 
@@ -70,6 +70,12 @@ class ToastScreen extends StatelessWidget {
             () => _showDragToDismiss(context),
           ),
           listItem(
+            'Await the Result',
+            'toastClosed — why did it close? (timeout / user / swipe …)',
+            Icons.hourglass_empty_rounded,
+            () => _showAwaitable(context),
+          ),
+          listItem(
             'Fully Custom Card',
             'customBuilder — bypass every built-in appearance field',
             Icons.widgets_outlined,
@@ -114,6 +120,23 @@ ACDDialog.toast(
       message: 'Tap "Cancel Active Toast" again to dismiss me early',
       length: ACDToastLength.long,
       backgroundColor: Colors.black87,
+    ).show();
+  }
+
+  Future<void> _showAwaitable(BuildContext ctx) async {
+    final ACDDialog toast = ACDDialog.toast(
+      context: ctx,
+      message: 'Message archived — tap ✕ to undo',
+      closeButtonMode: ACDToastCloseButtonMode.always,
+      dragToDismiss: true,
+    )..show();
+    final ACDToastDismissReason reason = await toast.toastClosed!;
+    if (!ctx.mounted) return;
+    ACDDialog.toast(
+      context: ctx,
+      message: reason == ACDToastDismissReason.user
+          ? 'Undone'
+          : 'Closed by: ${reason.name}',
     ).show();
   }
 

@@ -1,12 +1,18 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart' show SchedulerBinding;
+import 'package:material_ui/material_ui.dart';
 
 import 'acd_motion.dart';
+import 'acd_motion_effect.dart';
+import 'acd_stagger_host.dart';
 import 'acd_stagger_options.dart';
 
-/// A dependency-free, staggered-entrance/exit `ListView` — each item is
-/// wrapped in an [ACDMotion] whose `delay` increases with its index, so
-/// items appear to cascade in one after another instead of all at once.
+/// A dependency-free, staggered-entrance/exit `ListView` — items play the
+/// same [ACDMotionEffect]s as [ACDMotion], each starting a little later by
+/// index, so they cascade in one after another instead of all at once.
+///
+/// The whole list runs off **one** shared animation clock (not a controller
+/// per item). Items that are first built after their turn has passed —
+/// e.g. scrolled into view later — appear already settled rather than
+/// replaying the entrance.
 ///
 /// ```dart
 /// ACDStaggeredList(
@@ -87,76 +93,26 @@ class ACDStaggeredList extends StatefulWidget {
   State<ACDStaggeredList> createState() => _ACDStaggeredListState();
 }
 
-class _ACDStaggeredListState extends State<ACDStaggeredList> {
-  int _entranceDone = 0;
-  int _exitDone = 0;
+class _ACDStaggeredListState extends State<ACDStaggeredList>
+    with SingleTickerProviderStateMixin, ACDStaggerHost<ACDStaggeredList> {
+  // One shared clock for every item — see ACDStaggerHost.
+  @override
+  int get staggerItemCount => widget.itemCount;
 
   @override
-  void initState() {
-    super.initState();
-    _maybeFireEmptyCompletion();
-  }
+  bool get staggerVisible => widget.visible;
 
   @override
-  void didUpdateWidget(covariant ACDStaggeredList oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.visible != oldWidget.visible) {
-      _entranceDone = 0;
-      _exitDone = 0;
-      _maybeFireEmptyCompletion();
-    }
-  }
+  ACDStaggerOptions get staggerOptions => widget.options;
 
-  // An empty list has no items to report completion for — fire immediately
-  // (post-frame, so it's never synchronous with a caller's setState/build)
-  // rather than leaving the caller waiting forever.
-  void _maybeFireEmptyCompletion() {
-    if (widget.itemCount != 0) return;
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (widget.visible) {
-        widget.onAllEntranceComplete?.call();
-      } else {
-        widget.onAllExitComplete?.call();
-      }
-    });
-  }
+  @override
+  VoidCallback? get staggerOnEntranceComplete => widget.onAllEntranceComplete;
 
-  void _handleEntranceComplete() {
-    _entranceDone++;
-    if (_entranceDone == widget.itemCount) {
-      widget.onAllEntranceComplete?.call();
-    }
-  }
-
-  void _handleExitComplete() {
-    _exitDone++;
-    if (_exitDone == widget.itemCount) {
-      widget.onAllExitComplete?.call();
-    }
-  }
-
-  Widget _wrap(BuildContext context, int index, Widget child) {
-    return ACDMotion(
-      key: ValueKey<int>(index),
-      visible: widget.visible,
-      delay: widget.options.delayForIndex(
-        index,
-        widget.itemCount,
-        visible: widget.visible,
-      ),
-      duration: widget.options.itemDuration,
-      curve: widget.options.curve,
-      effect: widget.options.effect,
-      exitEffect: widget.options.exitEffect,
-      onEntranceComplete: _handleEntranceComplete,
-      onExitComplete: _handleExitComplete,
-      child: child,
-    );
-  }
+  @override
+  VoidCallback? get staggerOnExitComplete => widget.onAllExitComplete;
 
   Widget _wrappedBuilder(BuildContext context, int index) =>
-      _wrap(context, index, widget.itemBuilder(context, index));
+      wrapStaggerItem(index, widget.itemBuilder(context, index));
 
   @override
   Widget build(BuildContext context) {

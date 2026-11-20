@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Visual style variant for a toast card. Resolved against the toast's base
 /// color to decide the actual fill/border treatment — see

@@ -1,7 +1,12 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../design/acd_design.dart';
+import '../design/acd_design_scope.dart';
+import '../design/internal/acd_adaptive_widgets.dart';
+import '../design/internal/acd_platform_support.dart';
 import 'acd_search_state.dart';
 
 /// The widget behind `ACDDialog.searchableList()` /
@@ -30,7 +35,7 @@ class ACDSearchableListTile<T> extends StatefulWidget {
     this.loadingBuilder,
     this.emptyBuilder,
     this.errorBuilder,
-    this.tileColor = Colors.white,
+    this.tileColor,
     this.color,
     this.fontSize,
     this.fontWeight,
@@ -57,11 +62,15 @@ class ACDSearchableListTile<T> extends StatefulWidget {
     this.favoriteItems,
     this.onFindPaged,
     this.loadMoreBuilder,
+    this.design,
   });
 
   /// The base dataset shown before any search, and searched locally when
   /// [onFind] isn't set.
   final List<T> items;
+
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign].
+  final ACDDesign? design;
 
   /// `true` for multi-select (`ACDDialog.multiSearchableList()`), `false`
   /// for single-select (`ACDDialog.searchableList()`).
@@ -114,8 +123,9 @@ class ACDSearchableListTile<T> extends StatefulWidget {
   /// Shown when [onFind] throws. Defaults to a centered error message.
   final Widget Function(BuildContext context, Object error)? errorBuilder;
 
-  /// Background color of each row.
-  final Color tileColor;
+  /// Background color of each row. Defaults to white (Material) or the
+  /// grouped-list cell color (Cupertino).
+  final Color? tileColor;
 
   /// Row text color.
   final Color? color;
@@ -320,9 +330,10 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
         _loadingMore = false;
         _hasMore = results.isNotEmpty;
         if (_hasMore) _page++;
+        final ACDSearchState<T> current = _state;
         final List<T> merged = reset
             ? results
-            : [...(_state as ACDSearchLoaded<T>).items, ...results];
+            : [if (current is ACDSearchLoaded<T>) ...current.items, ...results];
         _state = merged.isEmpty
             ? ACDSearchEmpty<T>(query)
             : ACDSearchLoaded<T>(merged);
@@ -411,31 +422,50 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
 
   @override
   Widget build(BuildContext context) {
+    // Resolved once and passed down — never per row.
+    final ACDResolvedDesign design = ACDDesign.resolve(context, widget.design);
     return Column(
       mainAxisSize: MainAxisSize.max,
       children: [
-        if (widget.showSearchBox) _buildSearchField(context),
-        Expanded(child: _buildBody(context, _state)),
+        if (widget.showSearchBox) _buildSearchField(context, design),
+        Expanded(child: _buildBody(context, _state, design)),
         if (widget.multiple && widget.showConfirmCancelButtons)
-          _buildConfirmCancelRow(context),
+          _buildConfirmCancelRow(context, design),
       ],
     );
   }
 
-  Widget _buildSearchField(BuildContext context) {
+  Widget _buildSearchField(BuildContext context, ACDResolvedDesign design) {
+    if (design.isCupertino) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        child: ACDAdaptiveTextField(
+          design: design,
+          search: true,
+          controller: _searchController,
+          decoration: InputDecoration(
+            hintText:
+                widget.searchHint ?? ACDDesignScope.stringsOf(context).search,
+          ),
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: TextField(
-        controller: _searchController,
-        decoration: InputDecoration(
-          hintText: widget.searchHint ?? 'Search...',
-          prefixIcon: Icon(widget.searchIcon),
-          fillColor: widget.searchFillColor,
-          filled: widget.searchFillColor != null,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(widget.searchBorderRadius),
-            borderSide: BorderSide(
-              color: widget.searchBorderColor ?? Colors.grey,
+      child: acdEnsureMaterial(
+        context,
+        TextField(
+          controller: _searchController,
+          decoration: InputDecoration(
+            hintText: widget.searchHint ?? 'Search...',
+            prefixIcon: Icon(widget.searchIcon),
+            fillColor: widget.searchFillColor,
+            filled: widget.searchFillColor != null,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(widget.searchBorderRadius),
+              borderSide: BorderSide(
+                color: widget.searchBorderColor ?? Colors.grey,
+              ),
             ),
           ),
         ),
@@ -443,13 +473,22 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
     );
   }
 
-  Widget _buildBody(BuildContext context, ACDSearchState<T> state) {
+  Widget _buildBody(
+    BuildContext context,
+    ACDSearchState<T> state,
+    ACDResolvedDesign design,
+  ) {
     return switch (state) {
-      ACDSearchIdle<T> s => _buildList(context, s.items),
+      ACDSearchIdle<T> s => _buildList(context, s.items, design),
       ACDSearchLoading<T>() =>
         widget.loadingBuilder?.call(context) ??
-            const Center(child: CircularProgressIndicator()),
-      ACDSearchLoaded<T> s => _buildList(context, s.items),
+            Center(
+              child: ACDAdaptiveProgress(
+                design: design,
+                semanticsLabel: ACDDesignScope.stringsOf(context).loading,
+              ),
+            ),
+      ACDSearchLoaded<T> s => _buildList(context, s.items, design),
       ACDSearchEmpty<T> s =>
         widget.emptyBuilder?.call(context, s.query) ??
             Center(child: Text('No results for "${s.query}"')),
@@ -459,24 +498,35 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
     };
   }
 
-  Widget _buildList(BuildContext context, List<T> items) {
+  Widget _buildList(
+    BuildContext context,
+    List<T> items,
+    ACDResolvedDesign design,
+  ) {
     final bool showLoadMoreRow = _paginating && _hasMore;
+    final TextStyle labelStyle = TextStyle(
+      color: widget.color,
+      fontSize: widget.fontSize,
+      fontWeight: widget.fontWeight,
+      fontFamily: widget.fontFamily,
+    ).merge(widget.style);
+    // The list always fills an Expanded slot, so it doesn't need to
+    // shrink-wrap (which forces laying out every row up front).
     return ListView.builder(
       padding: EdgeInsets.zero,
-      shrinkWrap: true,
       physics: widget.physics,
       controller: _paginating ? _paginationController : widget.controller,
       itemCount: items.length + (showLoadMoreRow ? 1 : 0),
       itemBuilder: (context, index) {
         if (index >= items.length) {
           return widget.loadMoreBuilder?.call(context) ??
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Center(
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                  child: ACDAdaptiveProgress(
+                    design: design,
+                    size: 20,
+                    strokeWidth: 2,
                   ),
                 ),
               );
@@ -486,42 +536,70 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
         final disabled = widget.isDisabledItem?.call(item) ?? false;
         final onTap = disabled ? null : () => _handleTap(item);
         if (widget.itemBuilder != null) {
-          return Opacity(
-            opacity: disabled ? 0.4 : 1.0,
-            child: InkWell(
-              onTap: onTap,
-              child: widget.itemBuilder!(context, item, selected),
+          return Semantics(
+            selected: selected,
+            child: Opacity(
+              opacity: disabled ? 0.4 : 1.0,
+              child: ACDAdaptiveTappable(
+                design: design,
+                onTap: onTap,
+                child: widget.itemBuilder!(context, item, selected),
+              ),
             ),
           );
         }
-        return Opacity(
-          opacity: disabled ? 0.4 : 1.0,
-          child: Material(
-            color: widget.tileColor,
-            child: ListTile(
-              onTap: onTap,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
-              shape: widget.borderRadius == null
-                  ? null
-                  : RoundedRectangleBorder(borderRadius: widget.borderRadius!),
-              leading: widget.multiple
-                  ? Checkbox(
-                      value: selected,
-                      activeColor: widget.checkboxActiveColor,
-                      onChanged: disabled ? null : (_) => _handleTap(item),
-                    )
-                  : null,
-              trailing: !widget.multiple && selected
-                  ? const Icon(Icons.check)
-                  : null,
-              title: Text(
-                _labelOf(item),
-                style: TextStyle(
-                  color: widget.color,
-                  fontSize: widget.fontSize,
-                  fontWeight: widget.fontWeight,
-                  fontFamily: widget.fontFamily,
-                ).merge(widget.style),
+        final Widget title = Text(_labelOf(item), style: labelStyle);
+        if (design.isCupertino) {
+          // iOS lists mark selection with a trailing checkmark (single) or
+          // a leading checkbox (multi) — not radio buttons.
+          return ACDAdaptiveListTile(
+            design: design,
+            enabled: !disabled,
+            selected: selected,
+            backgroundColor: widget.tileColor,
+            onTap: onTap,
+            leading: widget.multiple
+                ? ACDAdaptiveCheckbox(
+                    design: design,
+                    value: selected,
+                    activeColor: widget.checkboxActiveColor,
+                    onChanged: disabled ? null : (_) => _handleTap(item),
+                  )
+                : null,
+            trailing: !widget.multiple && selected
+                ? Icon(ACDIcon.check.of(design), size: 20)
+                : null,
+            title: title,
+          );
+        }
+        return Semantics(
+          selected: selected,
+          child: Opacity(
+            opacity: disabled ? 0.4 : 1.0,
+            child: acdEnsureMaterial(
+              context,
+              Material(
+                color: widget.tileColor ?? Colors.white,
+                child: ListTile(
+                  onTap: onTap,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  shape: widget.borderRadius == null
+                      ? null
+                      : RoundedRectangleBorder(
+                          borderRadius: widget.borderRadius!,
+                        ),
+                  leading: widget.multiple
+                      ? Checkbox(
+                          value: selected,
+                          activeColor: widget.checkboxActiveColor,
+                          onChanged: disabled ? null : (_) => _handleTap(item),
+                        )
+                      : null,
+                  trailing: !widget.multiple && selected
+                      ? const Icon(Icons.check)
+                      : null,
+                  title: title,
+                ),
               ),
             ),
           ),
@@ -530,29 +608,63 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
     );
   }
 
-  Widget _buildConfirmCancelRow(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        TextButton(
-          onPressed: widget.dialogDismiss,
-          style: TextButton.styleFrom(
-            foregroundColor: widget.cancelColor ?? Colors.grey,
+  Widget _buildConfirmCancelRow(
+    BuildContext context,
+    ACDResolvedDesign design,
+  ) {
+    void confirm() {
+      widget.onMultipleItemsChange?.call(_selected.toList());
+      widget.dialogDismiss?.call();
+    }
+
+    if (design.isCupertino) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          CupertinoButton(
+            onPressed: widget.dialogDismiss,
+            child: Text(
+              widget.cancelText,
+              style: widget.cancelColor == null
+                  ? null
+                  : TextStyle(color: widget.cancelColor),
+            ),
           ),
-          child: Text(widget.cancelText),
-        ),
-        TextButton(
-          onPressed: () {
-            widget.onMultipleItemsChange?.call(_selected.toList());
-            widget.dialogDismiss?.call();
-          },
-          style: TextButton.styleFrom(
-            foregroundColor: widget.confirmColor ?? Colors.teal,
-            textStyle: TextStyle(fontWeight: widget.confirmFontWeight),
+          CupertinoButton(
+            onPressed: confirm,
+            child: Text(
+              widget.confirmText,
+              style: TextStyle(
+                color: widget.confirmColor,
+                fontWeight: widget.confirmFontWeight ?? FontWeight.w600,
+              ),
+            ),
           ),
-          child: Text(widget.confirmText),
-        ),
-      ],
+        ],
+      );
+    }
+    return acdEnsureMaterial(
+      context,
+      Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          TextButton(
+            onPressed: widget.dialogDismiss,
+            style: TextButton.styleFrom(
+              foregroundColor: widget.cancelColor ?? Colors.grey,
+            ),
+            child: Text(widget.cancelText),
+          ),
+          TextButton(
+            onPressed: confirm,
+            style: TextButton.styleFrom(
+              foregroundColor: widget.confirmColor ?? Colors.teal,
+              textStyle: TextStyle(fontWeight: widget.confirmFontWeight),
+            ),
+            child: Text(widget.confirmText),
+          ),
+        ],
+      ),
     );
   }
 }

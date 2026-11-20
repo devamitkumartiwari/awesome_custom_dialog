@@ -1,9 +1,18 @@
-import 'package:flutter/material.dart';
+import 'dart:ui' as ui;
+
+import 'package:material_ui/material_ui.dart';
+
+import '../design/acd_design.dart';
+import '../design/acd_design_scope.dart';
+import '../design/acd_design_tokens.dart';
+import '../design/internal/acd_adaptive_widgets.dart';
+import '../design/internal/acd_platform_support.dart';
 
 import '../core/acd_content_type.dart';
 import 'acd_toast_close_button_mode.dart';
 import 'acd_toast_config.dart';
 import 'acd_toast_controller.dart';
+import 'acd_toast_dismiss_reason.dart';
 import 'acd_toast_progress_bar.dart';
 import 'acd_toast_style.dart';
 
@@ -29,7 +38,8 @@ class ACDToastCard extends StatefulWidget {
   final ACDToastController controller;
 
   /// Called to request this toast be dismissed (tap/close-button/drag).
-  final void Function({bool immediate}) onDismissRequested;
+  final void Function({bool immediate, ACDToastDismissReason reason})
+  onDismissRequested;
 
   @override
   State<ACDToastCard> createState() => _ACDToastCardState();
@@ -46,9 +56,24 @@ class _ACDToastCardState extends State<ACDToastCard> {
       return _config.customBuilder!(
         context,
         _config,
-        () => widget.onDismissRequested(),
+        () => widget.onDismissRequested(reason: ACDToastDismissReason.user),
       );
     }
+
+    final ACDResolvedDesign design = ACDDesign.resolve(context, _config.design);
+    // iOS HUD look: a translucent, blurred pill — used for Cupertino when the
+    // caller hasn't styled the toast themselves.
+    final bool iosHud =
+        design.isCupertino &&
+        _config.backgroundColor == null &&
+        _config.contentType == null &&
+        _config.backgroundGradient == null &&
+        _config.decoration == null &&
+        _config.shape == null &&
+        _config.style == null;
+    final ACDDesignTokens? tokens = iosHud
+        ? ACDDesignTokens.of(context, design)
+        : null;
 
     final Color baseColor =
         _config.backgroundColor ??
@@ -57,11 +82,13 @@ class _ACDToastCardState extends State<ACDToastCard> {
     final ACDToastStyle style = _config.style ?? ACDToastStyle.filled;
     final ACDToastStyleResolved resolved = style.resolve(baseColor);
     final Color textColor =
-        _config.textColor ?? ACDToastConfig.fallback.textColor!;
+        _config.textColor ??
+        tokens?.onSurface ??
+        ACDToastConfig.fallback.textColor!;
 
-    final Color? effectiveFill = _config.backgroundGradient == null
-        ? resolved.fill
-        : null;
+    final Color? effectiveFill = tokens != null
+        ? tokens.surfaceContainer.withValues(alpha: 0.82)
+        : (_config.backgroundGradient == null ? resolved.fill : null);
     final BorderSide? effectiveBorder =
         _config.border ??
         (_config.borderColor != null
@@ -74,38 +101,46 @@ class _ACDToastCardState extends State<ACDToastCard> {
     final BorderRadius effectiveRadius =
         _config.cornerRadius ??
         BorderRadius.circular(
-          _config.borderRadius ?? ACDToastConfig.fallback.borderRadius!,
+          _config.borderRadius ??
+              (iosHud ? 22 : ACDToastConfig.fallback.borderRadius!),
         );
 
-    // Always wrapped in a Material ancestor (matching ACDDialog's own
-    // _buildContentCard) — without one, Text inside falls back to Flutter's
-    // debug-mode placeholder style (yellow text, double yellow underline)
-    // instead of an invisible/typography-inherited style.
+    // Always wrapped in a surface that supplies a text style — without one,
+    // Text inside falls back to Flutter's debug-mode placeholder style
+    // (yellow text, double yellow underline). Material: a Material (as
+    // before); Cupertino: clip + Cupertino text style, no Material needed.
     Widget card;
     if (_config.shape != null) {
-      card = Material(
+      card = ACDAdaptiveSurface(
+        design: design,
         shape: _config.shape,
         color: effectiveFill ?? Colors.transparent,
-        clipBehavior: Clip.antiAlias,
-        child: _buildInner(context, textColor, null),
+        child: _buildInner(context, textColor, null, design),
       );
     } else {
-      card = Material(
-        type: MaterialType.transparency,
+      Widget inner = _buildInner(
+        context,
+        textColor,
+        _config.decoration ??
+            BoxDecoration(
+              color: effectiveFill,
+              gradient: _config.backgroundGradient,
+              border: effectiveBorder != null
+                  ? Border.fromBorderSide(effectiveBorder)
+                  : null,
+            ),
+        design,
+      );
+      if (iosHud) {
+        inner = BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: inner,
+        );
+      }
+      card = ACDAdaptiveSurface(
+        design: design,
         borderRadius: effectiveRadius,
-        clipBehavior: Clip.antiAlias,
-        child: _buildInner(
-          context,
-          textColor,
-          _config.decoration ??
-              BoxDecoration(
-                color: effectiveFill,
-                gradient: _config.backgroundGradient,
-                border: effectiveBorder != null
-                    ? Border.fromBorderSide(effectiveBorder)
-                    : null,
-              ),
-        ),
+        child: inner,
       );
     }
 
@@ -116,20 +151,24 @@ class _ACDToastCardState extends State<ACDToastCard> {
       child: card,
     );
 
+    // Hover only changes what's drawn in onHover close-button mode — skip
+    // the rebuild otherwise.
+    final bool hoverAffectsUi =
+        _config.closeButtonMode == ACDToastCloseButtonMode.onHover;
     result = MouseRegion(
       onEnter: (_) {
-        setState(() => _hovering = true);
+        if (hoverAffectsUi) setState(() => _hovering = true);
         if (_config.pauseOnHover ?? false) widget.controller.pause();
       },
       onExit: (_) {
-        setState(() => _hovering = false);
+        if (hoverAffectsUi) setState(() => _hovering = false);
         if (_config.pauseOnHover ?? false) widget.controller.resume();
       },
       child: (_config.dismissOnTap ?? false)
           ? GestureDetector(
               onTap: () {
                 _config.onTap?.call();
-                widget.onDismissRequested();
+                widget.onDismissRequested(reason: ACDToastDismissReason.user);
               },
               child: result,
             )
@@ -142,11 +181,17 @@ class _ACDToastCardState extends State<ACDToastCard> {
       result = Dismissible(
         key: ValueKey('${widget.controller.id}-dismissible'),
         direction: DismissDirection.horizontal,
-        onDismissed: (_) => widget.onDismissRequested(immediate: true),
+        onDismissed: (_) => widget.onDismissRequested(
+          immediate: true,
+          reason: ACDToastDismissReason.swipe,
+        ),
         child: result,
       );
     }
 
+    // One announcement: the label carries the message and only the visible
+    // message Text is excluded (so it isn't read twice) — the close button
+    // and any actions stay reachable for screen-reader users.
     return Semantics(
       container: true,
       liveRegion: true,
@@ -155,10 +200,22 @@ class _ACDToastCardState extends State<ACDToastCard> {
     );
   }
 
+  @override
+  void initState() {
+    super.initState();
+    // iOS VoiceOver ignores liveRegion — announce explicitly once.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _config.customBuilder == null) {
+        acdAnnounce(context, _config.message);
+      }
+    });
+  }
+
   Widget _buildInner(
     BuildContext context,
     Color textColor,
     Decoration? decoration,
+    ACDResolvedDesign design,
   ) {
     final IconData? resolvedIcon = _config.icon ?? _config.contentType?.icon;
     final bool showIcon = (_config.showIcon ?? true) && resolvedIcon != null;
@@ -168,13 +225,15 @@ class _ACDToastCardState extends State<ACDToastCard> {
         closeMode == ACDToastCloseButtonMode.always ||
         (closeMode == ACDToastCloseButtonMode.onHover && _hovering);
 
-    final Widget messageWidget = Text(
-      _config.message,
-      style: TextStyle(
-        color: textColor,
-        fontSize: _config.fontSize ?? ACDToastConfig.fallback.fontSize!,
-        fontFamily: _config.fontFamily,
-      ).merge(_config.textStyle),
+    final Widget messageWidget = ExcludeSemantics(
+      child: Text(
+        _config.message,
+        style: TextStyle(
+          color: textColor,
+          fontSize: _config.fontSize ?? ACDToastConfig.fallback.fontSize!,
+          fontFamily: _config.fontFamily,
+        ).merge(_config.textStyle),
+      ),
     );
 
     final Widget contentRow = Row(
@@ -208,20 +267,37 @@ class _ACDToastCardState extends State<ACDToastCard> {
         // never() removes the slot entirely rather than hiding an
         // invisible button, which would otherwise leave a dead gap.
         if (closeMode != ACDToastCloseButtonMode.never) ...[
-          const SizedBox(width: 8),
+          // No extra spacer: the 48/44 tap box already pads the glyph.
           Opacity(
             opacity: showClose ? 1.0 : 0.0,
             child: IgnorePointer(
               ignoring: !showClose,
-              child: GestureDetector(
-                onTap: () {
-                  _config.onCloseButtonTap?.call();
-                  widget.onDismissRequested();
-                },
-                child: Icon(
-                  _config.closeIcon ?? ACDToastConfig.fallback.closeIcon!,
-                  color: textColor,
-                  size: 18,
+              child: Semantics(
+                // Its own node — not merged into the toast's message label.
+                container: true,
+                button: true,
+                label: ACDDesignScope.stringsOf(context).close,
+                excludeSemantics: true,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    _config.onCloseButtonTap?.call();
+                    widget.onDismissRequested(
+                      reason: ACDToastDismissReason.user,
+                    );
+                  },
+                  // 48 dp / 44 pt hit area around the 18 px glyph.
+                  child: ACDTapTargetBox(
+                    design: design,
+                    child: Icon(
+                      _config.closeIcon ??
+                          (design.isCupertino
+                              ? ACDIcon.close.of(design)
+                              : ACDToastConfig.fallback.closeIcon!),
+                      color: textColor,
+                      size: 18,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -272,7 +348,26 @@ class _ACDPulsingIconState extends State<_ACDPulsingIcon>
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 700),
-  )..repeat(reverse: true);
+  );
+  // Built once — not per build (a CurvedAnimation per build would leak a
+  // listener on the controller every rebuild).
+  late final Animation<double> _scale = Tween<double>(
+    begin: 0.85,
+    end: 1.0,
+  ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // An endless pulse is exactly what reduce-motion users opt out of.
+    if (acdReduceMotion(context)) {
+      _controller
+        ..stop()
+        ..value = 1;
+    } else if (!_controller.isAnimating) {
+      _controller.repeat(reverse: true);
+    }
+  }
 
   @override
   void dispose() {
@@ -282,12 +377,11 @@ class _ACDPulsingIconState extends State<_ACDPulsingIcon>
 
   @override
   Widget build(BuildContext context) {
-    return ScaleTransition(
-      scale: Tween(
-        begin: 0.85,
-        end: 1.0,
-      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut)),
-      child: Icon(widget.icon, color: widget.color, size: 20),
+    return RepaintBoundary(
+      child: ScaleTransition(
+        scale: _scale,
+        child: Icon(widget.icon, color: widget.color, size: 20),
+      ),
     );
   }
 }

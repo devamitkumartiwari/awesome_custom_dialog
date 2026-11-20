@@ -11,7 +11,7 @@ import 'package:awesome_custom_dialog_example/screens/switch/basics_screen.dart'
 import 'package:awesome_custom_dialog_example/screens/switch/custom_builder_screen.dart';
 import 'package:awesome_custom_dialog_example/screens/switch/styling_gallery_screen.dart';
 import 'package:awesome_custom_dialog_example/screens/switch/switch_hub_screen.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -1,6 +1,6 @@
 import 'dart:async' show Timer;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'acd_animated_text.dart';
 import 'acd_motion_effect.dart';

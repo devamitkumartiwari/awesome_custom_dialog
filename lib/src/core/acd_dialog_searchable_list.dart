@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'acd_dialog.dart';
 import '../list_tile/acd_searchable_list_tile.dart';
@@ -29,7 +29,7 @@ extension ACDDialogSearchableList on ACDDialog {
     Widget Function(BuildContext context, Object error)? errorBuilder,
     double? height,
     EdgeInsets? padding,
-    Color tileColor = Colors.white,
+    Color? tileColor,
     Color? color,
     double? fontSize,
     FontWeight? fontWeight,
@@ -50,7 +50,7 @@ extension ACDDialogSearchableList on ACDDialog {
     Widget Function(BuildContext context)? loadMoreBuilder,
   }) {
     if (context == null) return this;
-    final size = MediaQuery.of(context!).size;
+    final size = MediaQuery.sizeOf(context!);
     return widget(
       Container(
         height: height,
@@ -95,6 +95,7 @@ extension ACDDialogSearchableList on ACDDialog {
           favoriteItems: favoriteItems,
           onFindPaged: onFindPaged,
           loadMoreBuilder: loadMoreBuilder,
+          design: design,
         ),
       ),
     );
@@ -133,7 +134,7 @@ extension ACDDialogSearchableList on ACDDialog {
     Widget Function(BuildContext context, Object error)? errorBuilder,
     double? height,
     EdgeInsets? padding,
-    Color tileColor = Colors.white,
+    Color? tileColor,
     Color? color,
     double? fontSize,
     FontWeight? fontWeight,
@@ -154,7 +155,7 @@ extension ACDDialogSearchableList on ACDDialog {
     Widget Function(BuildContext context)? loadMoreBuilder,
   }) {
     if (context == null) return this;
-    final size = MediaQuery.of(context!).size;
+    final size = MediaQuery.sizeOf(context!);
     return widget(
       Container(
         height: height,
@@ -205,6 +206,7 @@ extension ACDDialogSearchableList on ACDDialog {
           favoriteItems: favoriteItems,
           onFindPaged: onFindPaged,
           loadMoreBuilder: loadMoreBuilder,
+          design: design,
         ),
       ),
     );

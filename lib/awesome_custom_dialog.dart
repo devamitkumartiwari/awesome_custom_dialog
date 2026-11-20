@@ -6,6 +6,7 @@ library;
 export 'src/autocomplete/autocomplete.dart';
 export 'src/core/core.dart';
 export 'src/dashed/dashed.dart';
+export 'src/design/design.dart';
 export 'src/dotted/dotted.dart';
 export 'src/dropdown/dropdown.dart';
 export 'src/list_tile/list_tile.dart';

@@ -1,8 +1,16 @@
 import 'dart:math' as math;
 
-import 'package:flutter/gestures.dart' show PointerExitEvent, PointerHoverEvent;
-import 'package:flutter/material.dart';
+import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../design/acd_design.dart';
+import '../design/acd_design_scope.dart';
+import '../design/acd_design_tokens.dart';
+import '../design/acd_strings.dart';
+import '../design/internal/acd_adaptive_widgets.dart';
+import '../design/internal/acd_platform_support.dart';
 import '../motion/acd_pop_animation.dart';
 import 'acd_rating_icon_style.dart';
 import 'acd_rating_interaction_mode.dart';
@@ -66,9 +74,10 @@ class ACDRatingBar extends StatefulWidget {
     this.glowRadius = 8,
     this.popAnimationOnChange = true,
     this.itemIconStyle = ACDRatingIconStyle.glyph,
-    this.filledIcon = Icons.star,
-    this.halfIcon = Icons.star_half,
-    this.emptyIcon = Icons.star_border,
+    this.filledIcon,
+    this.halfIcon,
+    this.emptyIcon,
+    this.design,
     this.starPoints = 5,
     this.starPointRounding = 0,
     this.starInnerRadiusRatio = 0.4,
@@ -187,15 +196,19 @@ class ACDRatingBar extends StatefulWidget {
 
   /// Filled-item icon, used when [itemIconStyle] is
   /// [ACDRatingIconStyle.glyph].
-  final IconData filledIcon;
+  final IconData? filledIcon;
 
   /// Half-item icon, used only in classic (non-[ratingPrecision]) half-star
   /// mode when [itemIconStyle] is [ACDRatingIconStyle.glyph].
-  final IconData halfIcon;
+  final IconData? halfIcon;
 
   /// Empty-item icon, used when [itemIconStyle] is
   /// [ACDRatingIconStyle.glyph].
-  final IconData emptyIcon;
+  final IconData? emptyIcon;
+
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign]. Picks the
+  /// default star glyphs and colors (iOS: SF-style stars, system yellow).
+  final ACDDesign? design;
 
   /// Star point count, used only when [itemIconStyle] is
   /// [ACDRatingIconStyle.vectorStar].
@@ -229,7 +242,15 @@ class _ACDRatingBarState extends State<ACDRatingBar>
   double? _dragPreviewRating;
   double? _hoverValue;
   Set<int> _poppingIndices = const {};
-  final GlobalKey _rowKey = GlobalKey();
+  // One key per star, for rect-based hit-testing.
+  List<GlobalKey> _itemKeys = const [];
+
+  List<GlobalKey> _keysFor(int count) {
+    if (_itemKeys.length != count) {
+      _itemKeys = List<GlobalKey>.generate(count, (_) => GlobalKey());
+    }
+    return _itemKeys;
+  }
 
   late final AnimationController _popController = AnimationController(
     vsync: this,
@@ -243,6 +264,15 @@ class _ACDRatingBarState extends State<ACDRatingBar>
 
   double get _effectiveRating =>
       _dragPreviewRating ?? _hoverValue ?? _committedRating;
+
+  /// The rating currently *drawn* (hover/drag preview or committed). Stars
+  /// listen to it individually, so a preview sweep never rebuilds the bar —
+  /// only the stars whose fill actually changes.
+  late final ValueNotifier<double> _display = ValueNotifier<double>(
+    _effectiveRating,
+  );
+
+  void _syncDisplay() => _display.value = _effectiveRating;
 
   double get _resolvedMaxRating =>
       widget.maxRating ?? widget.itemCount.toDouble();
@@ -260,6 +290,7 @@ class _ACDRatingBarState extends State<ACDRatingBar>
 
   @override
   void dispose() {
+    _display.dispose();
     _popController.dispose();
     super.dispose();
   }
@@ -275,15 +306,51 @@ class _ACDRatingBarState extends State<ACDRatingBar>
     return (clamped / step).ceil() * step;
   }
 
-  double _ratingFromLocalPosition(Offset localPosition, Size size) {
-    final bool rtl = _resolvedDirection(context) == TextDirection.rtl;
-    double fraction = widget.direction == Axis.horizontal
-        ? localPosition.dx / size.width
-        : localPosition.dy / size.height;
-    if (widget.direction == Axis.horizontal && rtl) fraction = 1 - fraction;
-    fraction = fraction.clamp(0.0, 1.0);
-    final double raw = _quantize(fraction * widget.itemCount);
-    return raw.clamp(widget.minRating, _resolvedMaxRating);
+  /// Maps a pointer to a rating using each star's *actual* rect, so
+  /// [ACDRatingBar.itemSpacing], [ACDRatingBar.itemPadding], separators and
+  /// wrapped runs are all honoured (the old math divided the whole row
+  /// evenly, which drifted as soon as any spacing was set).
+  double? _ratingFromGlobal(Offset global) {
+    final List<Rect> rects = <Rect>[];
+    for (final GlobalKey key in _itemKeys) {
+      final RenderObject? ro = key.currentContext?.findRenderObject();
+      if (ro is! RenderBox || !ro.hasSize) return null;
+      rects.add(ro.localToGlobal(Offset.zero) & ro.size);
+    }
+    if (rects.isEmpty) return null;
+
+    final bool horizontal = widget.direction == Axis.horizontal;
+    final bool rtl =
+        horizontal && _resolvedDirection(context) == TextDirection.rtl;
+    double crossDistance(Rect r) {
+      final double p = horizontal ? global.dy : global.dx;
+      final double lo = horizontal ? r.top : r.left;
+      final double hi = horizontal ? r.bottom : r.right;
+      return p < lo ? lo - p : (p > hi ? p - hi : 0);
+    }
+
+    // The run (line of a wrapped bar) closest to the pointer.
+    double best = double.infinity;
+    for (final Rect r in rects) {
+      best = math.min(best, crossDistance(r));
+    }
+
+    double? raw;
+    for (int i = 0; i < rects.length; i++) {
+      final Rect r = rects[i];
+      if (crossDistance(r) - best > 0.5) continue;
+      final double extent = horizontal ? r.width : r.height;
+      final double offset = horizontal
+          ? (rtl ? r.right - global.dx : global.dx - r.left)
+          : global.dy - r.top;
+      if (raw == null && offset < 0) {
+        raw = i.toDouble(); // before this run's first star
+        break;
+      }
+      if (offset >= 0) raw = i + (offset / extent).clamp(0.0, 1.0);
+    }
+    if (raw == null) return null;
+    return _quantize(raw).clamp(widget.minRating, _resolvedMaxRating);
   }
 
   void _commit(double value) {
@@ -295,7 +362,10 @@ class _ACDRatingBarState extends State<ACDRatingBar>
     if (widget.popAnimationOnChange && clamped != old) {
       _playPop(old, clamped);
     }
-    if (clamped != old) widget.onRatingUpdate?.call(clamped);
+    if (clamped != old) {
+      if (_design.isCupertino) ACDHaptics.selection(context);
+      widget.onRatingUpdate?.call(clamped);
+    }
   }
 
   void _playPop(double oldRating, double newRating) {
@@ -317,10 +387,8 @@ class _ACDRatingBarState extends State<ACDRatingBar>
 
   void _handleTapUp(TapUpDetails details) {
     if (!_tapAllowed) return;
-    final Offset? local = _globalToLocal(details.globalPosition);
-    final Size? size = _currentSize();
-    if (local == null || size == null) return;
-    double newRating = _ratingFromLocalPosition(local, size);
+    double? newRating = _ratingFromGlobal(details.globalPosition);
+    if (newRating == null) return;
     if (widget.clearOnReTap && newRating == _committedRating) {
       newRating = 0;
     }
@@ -329,14 +397,13 @@ class _ACDRatingBarState extends State<ACDRatingBar>
 
   void _handlePanUpdate(DragUpdateDetails details) {
     if (!_dragAllowed) return;
-    final Offset? local = _globalToLocal(details.globalPosition);
-    final Size? size = _currentSize();
-    if (local == null || size == null) return;
-    final double newRating = _ratingFromLocalPosition(local, size);
+    final double? newRating = _ratingFromGlobal(details.globalPosition);
+    if (newRating == null) return;
     if (widget.updateOnDrag) {
       _commit(newRating);
     } else {
-      setState(() => _dragPreviewRating = newRating);
+      _dragPreviewRating = newRating;
+      _syncDisplay();
     }
   }
 
@@ -345,28 +412,59 @@ class _ACDRatingBarState extends State<ACDRatingBar>
     if (!widget.updateOnDrag && _dragPreviewRating != null) {
       _commit(_dragPreviewRating!);
     }
-    setState(() => _dragPreviewRating = null);
+    _dragPreviewRating = null;
+    _syncDisplay();
   }
 
   void _handleHover(PointerHoverEvent event) {
     if (!widget.enableHoverPreview) return;
-    final Offset? local = _globalToLocal(event.position);
-    final Size? size = _currentSize();
-    if (local == null || size == null) return;
-    setState(() => _hoverValue = _ratingFromLocalPosition(local, size));
+    final double? value = _ratingFromGlobal(event.position);
+    if (value == null || value == _hoverValue) return;
+    _hoverValue = value;
+    _syncDisplay();
   }
 
   void _handleHoverExit(PointerExitEvent event) {
     if (!widget.enableHoverPreview) return;
-    setState(() => _hoverValue = null);
+    _hoverValue = null;
+    _syncDisplay();
   }
 
   Color _resolvedFilledColor(BuildContext context) =>
-      widget.filledColor ?? Colors.amber;
+      widget.filledColor ??
+      (_design.isCupertino
+          ? CupertinoDynamicColor.resolve(CupertinoColors.systemYellow, context)
+          : Colors.amber);
 
   Color _resolvedUnratedColor(BuildContext context) =>
       widget.unratedColor ??
-      Theme.of(context).colorScheme.surfaceContainerHighest;
+      (_design.isCupertino
+          ? ACDDesignTokens.of(context, _design).track
+          : Theme.of(context).colorScheme.surfaceContainerHighest);
+
+  double get _step =>
+      widget.ratingPrecision ?? (widget.allowHalfRating ? 0.5 : 1.0);
+
+  void _nudge(int direction) {
+    _commit(_committedRating + direction * _step);
+  }
+
+  // Arrow keys adjust the rating (reading-direction aware horizontally).
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    final bool rtl = _resolvedDirection(context) == TextDirection.rtl;
+    final LogicalKeyboardKey key = event.logicalKey;
+    int? dir;
+    if (key == LogicalKeyboardKey.arrowUp) dir = 1;
+    if (key == LogicalKeyboardKey.arrowDown) dir = -1;
+    if (key == LogicalKeyboardKey.arrowRight) dir = rtl ? -1 : 1;
+    if (key == LogicalKeyboardKey.arrowLeft) dir = rtl ? 1 : -1;
+    if (dir == null) return KeyEventResult.ignored;
+    _nudge(dir);
+    return KeyEventResult.handled;
+  }
 
   Widget _starShape(Color color) => Container(
     width: widget.itemSize,
@@ -396,7 +494,7 @@ class _ACDRatingBarState extends State<ACDRatingBar>
         status == ACDRatingItemStatus.half;
     if (useHalfGlyph) {
       return Icon(
-        widget.halfIcon,
+        widget.halfIcon ?? ACDIcon.starHalf.of(_design),
         size: widget.itemSize,
         color: widget.halfColor ?? filled,
       );
@@ -405,12 +503,16 @@ class _ACDRatingBarState extends State<ACDRatingBar>
     final Widget background =
         widget.itemIconStyle == ACDRatingIconStyle.vectorStar
         ? _starShape(unrated)
-        : Icon(widget.emptyIcon, size: widget.itemSize, color: unrated);
+        : Icon(
+            widget.emptyIcon ?? ACDIcon.starOutline.of(_design),
+            size: widget.itemSize,
+            color: unrated,
+          );
 
     Widget foreground = widget.itemIconStyle == ACDRatingIconStyle.vectorStar
         ? _starShape(filled)
         : Icon(
-            widget.filledIcon,
+            widget.filledIcon ?? ACDIcon.star.of(_design),
             size: widget.itemSize,
             color: widget.filledGradient == null ? filled : null,
           );
@@ -445,6 +547,7 @@ class _ACDRatingBarState extends State<ACDRatingBar>
         widget.itemBuilder?.call(context, index, fillFraction, status) ??
         _defaultItem(context, fillFraction, status);
     item = SizedBox(
+      key: _itemKeys[index],
       width: widget.itemSize,
       height: widget.itemSize,
       child: item,
@@ -480,19 +583,64 @@ class _ACDRatingBarState extends State<ACDRatingBar>
     return Padding(padding: widget.itemPadding, child: item);
   }
 
+  // Resolved once per build; read by the item/color helpers.
+  ACDResolvedDesign _design = ACDResolvedDesign.material;
+
   @override
   Widget build(BuildContext context) {
+    _design = ACDDesign.resolve(context, widget.design);
+    final Widget bar = _buildBar(context);
+    final ACDStrings strings = ACDDesignScope.stringsOf(context);
+    final double max = _resolvedMaxRating;
+    final int maxItems = widget.itemCount;
+    String label(double r) => strings.ratingLabel(r, maxItems);
+    final double current = _committedRating;
+    // A slider-like control for screen readers: value + increase/decrease.
+    return Semantics(
+      slider: _interactive,
+      value: label(current),
+      increasedValue: _interactive && current < max
+          ? label((current + _step).clamp(widget.minRating, max))
+          : null,
+      decreasedValue: _interactive && current > widget.minRating
+          ? label((current - _step).clamp(widget.minRating, max))
+          : null,
+      onIncrease: _interactive && current < max ? () => _nudge(1) : null,
+      onDecrease: _interactive && current > widget.minRating
+          ? () => _nudge(-1)
+          : null,
+      child: ExcludeSemantics(
+        child: _interactive ? Focus(onKeyEvent: _onKey, child: bar) : bar,
+      ),
+    );
+  }
+
+  Widget _buildBar(BuildContext context) {
+    // Committed changes arrive through a normal rebuild; keep the shared
+    // notifier in step (post-frame: never notify listeners during build).
+    if (_display.value != _effectiveRating) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _syncDisplay();
+      });
+    }
     final double effectiveRating = _effectiveRating;
+    _keysFor(widget.itemCount);
     final List<Widget> children = [];
     for (int i = 0; i < widget.itemCount; i++) {
       if (i > 0 && widget.separatorBuilder != null) {
         children.add(widget.separatorBuilder!(context, i));
       }
-      children.add(_buildItem(context, i, effectiveRating));
+      children.add(
+        _ACDStarSlot(
+          index: i,
+          rating: _display,
+          initialRating: effectiveRating,
+          builder: (context, rating) => _buildItem(context, i, rating),
+        ),
+      );
     }
 
     final Widget row = Wrap(
-      key: _rowKey,
       direction: widget.direction,
       alignment: widget.wrapAlignment,
       spacing: widget.itemSpacing,
@@ -513,22 +661,17 @@ class _ACDRatingBarState extends State<ACDRatingBar>
         onTapUp: _tapAllowed ? _handleTapUp : null,
         onPanUpdate: _dragAllowed ? _handlePanUpdate : null,
         onPanEnd: _dragAllowed ? _handlePanEnd : null,
-        child: row,
+        // 48 dp / 44 pt touch band across the bar's cross axis, so small
+        // stars stay easy to hit (taps above/below map to the nearest run).
+        child: ConstrainedBox(
+          constraints: widget.direction == Axis.horizontal
+              ? BoxConstraints(minHeight: acdMinTapTarget(_design))
+              : BoxConstraints(minWidth: acdMinTapTarget(_design)),
+          child: Center(widthFactor: 1, heightFactor: 1, child: row),
+        ),
       ),
     );
   }
-
-  RenderBox? get _rowRenderBox {
-    final RenderObject? renderObject = _rowKey.currentContext
-        ?.findRenderObject();
-    return renderObject is RenderBox && renderObject.hasSize
-        ? renderObject
-        : null;
-  }
-
-  Offset? _globalToLocal(Offset global) => _rowRenderBox?.globalToLocal(global);
-
-  Size? _currentSize() => _rowRenderBox?.size;
 }
 
 class _ACDFractionClipper extends CustomClipper<Rect> {
@@ -548,4 +691,68 @@ class _ACDFractionClipper extends CustomClipper<Rect> {
   @override
   bool shouldReclip(covariant _ACDFractionClipper oldClipper) =>
       oldClipper.fraction != fraction || oldClipper.rtl != rtl;
+}
+
+/// One star that rebuilds only when *its* appearance changes — its fill
+/// fraction, or whether it's the top (glowing) star — as [rating] moves.
+class _ACDStarSlot extends StatefulWidget {
+  const _ACDStarSlot({
+    required this.index,
+    required this.rating,
+    required this.initialRating,
+    required this.builder,
+  });
+
+  final int index;
+  final ValueListenable<double> rating;
+
+  /// The rating the parent built with (authoritative for this build).
+  final double initialRating;
+  final Widget Function(BuildContext context, double rating) builder;
+
+  @override
+  State<_ACDStarSlot> createState() => _ACDStarSlotState();
+}
+
+class _ACDStarSlotState extends State<_ACDStarSlot> {
+  late double _rating = widget.initialRating;
+
+  (double, bool) _lookFor(double rating) {
+    final double fill = (rating - widget.index).clamp(0.0, 1.0);
+    return (fill, fill > 0 && widget.index == rating.ceil() - 1);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.rating.addListener(_onRating);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ACDStarSlot oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.rating != widget.rating) {
+      oldWidget.rating.removeListener(_onRating);
+      widget.rating.addListener(_onRating);
+    }
+    _rating = widget.initialRating;
+  }
+
+  @override
+  void dispose() {
+    widget.rating.removeListener(_onRating);
+    super.dispose();
+  }
+
+  void _onRating() {
+    final double next = widget.rating.value;
+    if (_lookFor(next) == _lookFor(_rating)) {
+      _rating = next;
+      return;
+    }
+    setState(() => _rating = next);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _rating);
 }

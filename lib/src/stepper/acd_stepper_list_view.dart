@@ -1,7 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../dashed/acd_dash_path.dart';
+import '../design/acd_design.dart';
 import 'acd_step_status.dart';
+import 'acd_stepper_design.dart';
 
 /// One row's worth of data for [ACDStepperListView].
 class ACDStepperItemData<T> {
@@ -77,6 +79,7 @@ class ACDStepperListView<T> extends StatelessWidget {
   /// Creates an [ACDStepperListView].
   const ACDStepperListView({
     super.key,
+    this.design,
     required this.items,
     required this.contentBuilder,
     this.avatarBuilder,
@@ -147,6 +150,10 @@ class ACDStepperListView<T> extends StatelessWidget {
   /// Passed through to the inner `ListView.builder`.
   final ScrollController? controller;
 
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign]. Cupertino
+  /// maps default colors to iOS system colors.
+  final ACDDesign? design;
+
   @override
   Widget build(BuildContext context) {
     return ListView.builder(
@@ -162,48 +169,52 @@ class ACDStepperListView<T> extends StatelessWidget {
             _defaultAvatar(context, item, index);
         final Widget? label = labelBuilder?.call(context, item, index);
 
-        return IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Column(
-                children: [
-                  SizedBox(
-                    width: avatarSize,
-                    height: avatarSize,
-                    child: avatar,
-                  ),
-                  if (!isLast || showLineOnLast)
-                    Expanded(
-                      child: CustomPaint(
-                        painter: _ACDStepperListLinePainter(
-                          color:
-                              theme.lineColor ??
-                              Theme.of(context).colorScheme.outlineVariant,
-                          width: theme.lineWidth,
-                          dashed: theme.dashed,
-                          dashLength: theme.dashLength,
-                          dashGap: theme.dashGap,
-                        ),
-                      ),
-                    ),
-                ],
+        // One layout pass (no IntrinsicHeight): the content sets the row's
+        // height; the avatar and the connector are positioned against it.
+        return Stack(
+          children: [
+            ConstrainedBox(
+              constraints: BoxConstraints(minHeight: avatarSize),
+              child: Padding(
+                padding: EdgeInsetsDirectional.only(
+                  start: avatarSize + 12,
+                  bottom: 16,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [?label, contentBuilder(context, item, index)],
+                ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (label != null) label,
-                      contentBuilder(context, item, index),
-                    ],
+            ),
+            if (!isLast || showLineOnLast)
+              PositionedDirectional(
+                start: avatarSize / 2,
+                width: 0,
+                top: avatarSize,
+                bottom: 0,
+                child: CustomPaint(
+                  painter: _ACDStepperListLinePainter(
+                    color:
+                        theme.lineColor ??
+                        acdStepperScheme(
+                          context,
+                          ACDDesign.resolve(context, design),
+                        ).outlineVariant,
+                    width: theme.lineWidth,
+                    dashed: theme.dashed,
+                    dashLength: theme.dashLength,
+                    dashGap: theme.dashGap,
                   ),
                 ),
               ),
-            ],
-          ),
+            PositionedDirectional(
+              start: 0,
+              top: 0,
+              width: avatarSize,
+              height: avatarSize,
+              child: avatar,
+            ),
+          ],
         );
       },
     );
@@ -214,7 +225,10 @@ class ACDStepperListView<T> extends StatelessWidget {
     ACDStepperItemData<T> item,
     int index,
   ) {
-    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final ColorScheme scheme = acdStepperScheme(
+      context,
+      ACDDesign.resolve(context, design),
+    );
     final Color background = avatarColor ?? scheme.primary;
     return AnimatedContainer(
       duration: animationDuration,

@@ -1,9 +1,12 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../design/acd_design.dart';
 import 'acd_loader_arc_type.dart';
+import 'acd_loader_design.dart';
 import 'acd_loader_direction.dart';
+import 'acd_loader_motion.dart';
 import 'acd_loader_fill_mode.dart';
 import 'acd_loader_paint.dart';
 import 'acd_loader_stroke_cap.dart';
@@ -69,6 +72,9 @@ class ACDCircularPercentIndicator extends StatefulWidget {
     this.maskFilter,
     this.indicator,
     this.keepAlive = false,
+    this.design,
+    this.indeterminate = false,
+    this.style = ACDLoaderStyle.flat,
     this.onAnimationEnd,
     this.onPercentChanged,
   });
@@ -216,6 +222,21 @@ class ACDCircularPercentIndicator extends StatefulWidget {
   /// screen.
   final bool keepAlive;
 
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign]. Picks the
+  /// default track/progress colors (also dark-mode aware) when they aren't
+  /// set explicitly.
+  final ACDDesign? design;
+
+  /// Shows an indeterminate loader (a sweeping segment / spinning arc —
+  /// the iOS activity indicator under the Cupertino design) instead of a
+  /// value. Screen readers hear "Loading" with no percentage.
+  final bool indeterminate;
+
+  /// [ACDLoaderStyle.wavy] draws the active track as a moving sine wave
+  /// (Material 3 Expressive). Gradients/borders/mask filters apply to the
+  /// flat style only.
+  final ACDLoaderStyle style;
+
   /// Fires once a fill animation finishes.
   final VoidCallback? onAnimationEnd;
 
@@ -327,7 +348,29 @@ class _ACDCircularPercentIndicatorState
     final bool reverseFill =
         arc.reverse != (widget.direction == ACDLoaderDirection.reverse);
     final double diameter = widget.radius * 2;
-    final Widget? centerContent = _buildPercentageText();
+    final Widget? centerContent = widget.indeterminate
+        ? widget.center
+        : _buildPercentageText();
+    final bool needsClock =
+        widget.indeterminate || widget.style == ACDLoaderStyle.wavy;
+    final Widget motion = needsClock
+        ? ACDCircularLoaderMotion(
+            diameter: diameter,
+            lineWidth: widget.lineWidth,
+            trackColor:
+                widget.arcBackgroundColor ??
+                widget.backgroundColor ??
+                acdLoaderDefaults(context, widget.design).track,
+            progressColor:
+                widget.progressColor ??
+                acdLoaderDefaults(context, widget.design).progress,
+            indeterminate: widget.indeterminate,
+            wavy: widget.style == ACDLoaderStyle.wavy,
+            progress: currentAnimatedPercent,
+            reverse: reverseFill,
+            design: widget.design,
+          )
+        : const SizedBox.shrink();
 
     Widget ring = SizedBox(
       width: diameter,
@@ -344,33 +387,42 @@ class _ACDCircularPercentIndicatorState
                 ),
               ),
             ),
-          CustomPaint(
-            size: Size(diameter, diameter),
-            painter: _ACDCircularPercentIndicatorPainter(
-              progress: currentAnimatedPercent,
-              startAngleDeg: widget.startAngle,
-              sweepAngleDeg: arc.sweepAngle,
-              reverse: reverseFill,
-              fillMode: widget.fillMode,
-              backgroundColor:
-                  widget.arcBackgroundColor ??
-                  widget.backgroundColor ??
-                  const Color(0xFFB8C7CB),
-              progressColor:
-                  widget.progressColor ?? Theme.of(context).colorScheme.primary,
-              progressBorderColor: widget.progressBorderColor,
-              backgroundBorderColor: widget.backgroundBorderColor,
-              borderWidth: widget.borderWidth,
-              circularGradient: widget.circularGradient,
-              backgroundGradient: widget.backgroundGradient,
-              strokeCap: widget.strokeCap,
-              lineWidth: widget.lineWidth,
-              backgroundWidth: widget.backgroundWidth ?? widget.lineWidth,
-              maskFilter: widget.maskFilter,
+          if (widget.indeterminate)
+            motion
+          else if (needsClock)
+            acdLoaderSemantics(percent: currentAnimatedPercent, child: motion)
+          else
+            acdLoaderSemantics(
+              percent: currentAnimatedPercent,
+              child: CustomPaint(
+                size: Size(diameter, diameter),
+                painter: _ACDCircularPercentIndicatorPainter(
+                  progress: currentAnimatedPercent,
+                  startAngleDeg: widget.startAngle,
+                  sweepAngleDeg: arc.sweepAngle,
+                  reverse: reverseFill,
+                  fillMode: widget.fillMode,
+                  backgroundColor:
+                      widget.arcBackgroundColor ??
+                      widget.backgroundColor ??
+                      acdLoaderDefaults(context, widget.design).track,
+                  progressColor:
+                      widget.progressColor ??
+                      acdLoaderDefaults(context, widget.design).progress,
+                  progressBorderColor: widget.progressBorderColor,
+                  backgroundBorderColor: widget.backgroundBorderColor,
+                  borderWidth: widget.borderWidth,
+                  circularGradient: widget.circularGradient,
+                  backgroundGradient: widget.backgroundGradient,
+                  strokeCap: widget.strokeCap,
+                  lineWidth: widget.lineWidth,
+                  backgroundWidth: widget.backgroundWidth ?? widget.lineWidth,
+                  maskFilter: widget.maskFilter,
+                ),
+              ),
             ),
-          ),
-          if (centerContent != null) centerContent,
-          if (widget.indicator != null)
+          ?centerContent,
+          if (widget.indicator != null && !widget.indeterminate)
             _ArcIndicatorPosition(
               radius: widget.radius,
               startAngleDeg: widget.startAngle,

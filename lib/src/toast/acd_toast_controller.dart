@@ -1,8 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'acd_toast_config.dart';
+import 'acd_toast_dismiss_reason.dart';
 import 'acd_toast_lifecycle.dart';
 
 /// The single source of truth for one active toast's lifecycle. Owns its
@@ -39,6 +40,13 @@ class ACDToastController {
 
   Timer? _timer;
   Stopwatch? _stopwatch;
+  final Completer<ACDToastDismissReason> _closed =
+      Completer<ACDToastDismissReason>();
+  ACDToastDismissReason _reason = ACDToastDismissReason.programmatic;
+
+  /// Completes exactly once, when this toast is gone, with why it closed —
+  /// `await` it to sequence work after a toast (e.g. undo windows).
+  Future<ACDToastDismissReason> get closed => _closed.future;
   Duration? _remaining;
   bool _disposed = false;
 
@@ -74,7 +82,10 @@ class ACDToastController {
     if (total == null || total == Duration.zero) return;
     _remaining = total;
     _stopwatch = Stopwatch()..start();
-    _timer = Timer(total, () => requestDismiss(auto: true));
+    _timer = Timer(
+      total,
+      () => requestDismiss(reason: ACDToastDismissReason.timeout),
+    );
     progressController
       ?..duration = total
       ..forward(from: 0.0);
@@ -100,7 +111,10 @@ class ACDToastController {
     if (_remaining == null || _timer != null || isDismissing) return;
     final Duration remaining = _remaining!;
     _stopwatch = Stopwatch()..start();
-    _timer = Timer(remaining, () => requestDismiss(auto: true));
+    _timer = Timer(
+      remaining,
+      () => requestDismiss(reason: ACDToastDismissReason.timeout),
+    );
     progressController?.animateTo(1.0, duration: remaining);
   }
 
@@ -108,20 +122,29 @@ class ACDToastController {
   /// auto-dismiss timer firing while a manual dismiss is already in
   /// flight) is a no-op. Pass `immediate: true` to skip the exit animation
   /// (e.g. drag-to-dismiss, which already animated its own removal).
+  /// [reason] is what [closed] completes with (the first request wins).
+  /// The deprecated [auto] flag is the same as
+  /// `reason: ACDToastDismissReason.timeout`.
   Future<void> requestDismiss({
     bool immediate = false,
-    bool auto = false,
+    @Deprecated('Use reason: ACDToastDismissReason.timeout') bool auto = false,
+    ACDToastDismissReason reason = ACDToastDismissReason.programmatic,
   }) async {
     if (isDismissing) return;
+    if (auto) reason = ACDToastDismissReason.timeout;
+    _reason = reason;
+    final bool timedOut = reason == ACDToastDismissReason.timeout;
     _timer?.cancel();
     _timer = null;
     state = const ACDToastDismissing();
     onChanged?.call();
-    if (auto) config.onAutoDismiss?.call();
+    if (timedOut) config.onAutoDismiss?.call();
 
     if (!immediate && animationController != null) {
       try {
-        await animationController!.reverse();
+        // orCancel: a plain TickerFuture never completes when cancelled,
+        // which would strand this dismiss (and skip dispose below).
+        await animationController!.reverse().orCancel;
       } on TickerCanceled {
         // The owning widget was torn down mid-animation — fine, proceed to
         // dispose below regardless.
@@ -144,6 +167,7 @@ class ACDToastController {
     progressController?.dispose();
     progressController = null;
     config.onDismissed?.call();
+    if (!_closed.isCompleted) _closed.complete(_reason);
     onChanged?.call();
   }
 }

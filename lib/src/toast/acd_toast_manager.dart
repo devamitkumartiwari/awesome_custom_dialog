@@ -1,10 +1,11 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../core/acd_gravity.dart';
 import 'acd_toast_config.dart';
 import 'acd_toast_controller.dart';
+import 'acd_toast_dismiss_reason.dart';
 import 'acd_toast_layer.dart';
 import 'acd_toast_lifecycle.dart';
 import 'acd_toast_stack.dart';
@@ -55,7 +56,10 @@ class ACDToastManager {
     if ((config.cancelPrevious ?? true) &&
         _lastShown != null &&
         !_lastShown!.isDismissing) {
-      _lastShown!.requestDismiss(immediate: true);
+      _lastShown!.requestDismiss(
+        immediate: true,
+        reason: ACDToastDismissReason.replaced,
+      );
     }
 
     final OverlayState? overlay = _resolveOverlay(context, config);

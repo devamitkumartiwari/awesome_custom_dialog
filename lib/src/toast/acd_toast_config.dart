@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../design/acd_design.dart';
 
 import '../core/acd_animation.dart';
 import '../core/acd_content_type.dart';
@@ -84,6 +86,7 @@ final class ACDToastConfig {
     this.onAutoDismiss,
     this.onShown,
     this.onDismissed,
+    this.design,
   });
 
   // ── Content ──────────────────────────────────────────────────────────────
@@ -305,6 +308,10 @@ final class ACDToastConfig {
   /// Called once this toast has finished disappearing, for any reason.
   final VoidCallback? onDismissed;
 
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign]. Cupertino
+  /// with no colors set renders an iOS-style translucent pill.
+  final ACDDesign? design;
+
   /// Literal, backward-compatible defaults — matches the values
   /// `ACDDialog.toast()` used before this config existed, so a call site
   /// that sets none of the new parameters resolves to exactly the same
@@ -397,6 +404,7 @@ final class ACDToastConfig {
     VoidCallback? onAutoDismiss,
     VoidCallback? onShown,
     VoidCallback? onDismissed,
+    ACDDesign? design,
   }) {
     return ACDToastConfig(
       message: message ?? this.message,
@@ -455,6 +463,7 @@ final class ACDToastConfig {
       onAutoDismiss: onAutoDismiss ?? this.onAutoDismiss,
       onShown: onShown ?? this.onShown,
       onDismissed: onDismissed ?? this.onDismissed,
+      design: design ?? this.design,
     );
   }
 
@@ -522,6 +531,7 @@ final class ACDToastConfig {
       onAutoDismiss: overlay.onAutoDismiss ?? base.onAutoDismiss,
       onShown: overlay.onShown ?? base.onShown,
       onDismissed: overlay.onDismissed ?? base.onDismissed,
+      design: overlay.design ?? base.design,
     );
   }
 
@@ -583,7 +593,8 @@ final class ACDToastConfig {
           onCloseButtonTap == other.onCloseButtonTap &&
           onAutoDismiss == other.onAutoDismiss &&
           onShown == other.onShown &&
-          onDismissed == other.onDismissed);
+          onDismissed == other.onDismissed &&
+          design == other.design);
 
   @override
   int get hashCode => Object.hash(
@@ -634,6 +645,13 @@ final class ACDToastConfig {
       actions,
       customBuilder,
     ),
-    Object.hash(onTap, onCloseButtonTap, onAutoDismiss, onShown, onDismissed),
+    Object.hash(
+      onTap,
+      onCloseButtonTap,
+      onAutoDismiss,
+      onShown,
+      onDismissed,
+      design,
+    ),
   );
 }

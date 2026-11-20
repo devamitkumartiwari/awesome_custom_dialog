@@ -1,5 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../design/acd_design.dart';
+import '../design/acd_design_tokens.dart';
 import 'acd_dialog.dart';
 
 /// Adds `text()` to [ACDDialog] for adding a styled line of text.
@@ -31,18 +33,29 @@ extension ACDDialogText on ACDDialog {
           // so plain-LTR usage is unchanged while RTL apps get the text
           // starting on the correct visual side without extra wiring.
           alignment: alignment ?? AlignmentDirectional.centerStart,
-          child: Text(
-            text ?? '',
-            textAlign: textAlign,
-            maxLines: maxLines,
-            textDirection: textDirection,
-            overflow: overflow,
-            style: TextStyle(
-              color: color ?? Colors.black,
-              fontSize: fontSize ?? 14.0,
-              fontWeight: fontWeight,
-              fontFamily: fontFamily,
-            ).merge(style),
+          // Builder: the default color resolves per design when the dialog
+          // builds (Material keeps black; iOS uses the dynamic label color,
+          // so it stays readable in dark mode).
+          child: Builder(
+            builder: (context) {
+              final ACDResolvedDesign design = resolveDesign(context);
+              final Color defaultColor = design.isCupertino
+                  ? ACDDesignTokens.of(context, design).onSurface
+                  : Colors.black;
+              return Text(
+                text ?? '',
+                textAlign: textAlign,
+                maxLines: maxLines,
+                textDirection: textDirection,
+                overflow: overflow,
+                style: TextStyle(
+                  color: color ?? defaultColor,
+                  fontSize: fontSize ?? 14.0,
+                  fontWeight: fontWeight,
+                  fontFamily: fontFamily,
+                ).merge(style),
+              );
+            },
           ),
         ),
       ),

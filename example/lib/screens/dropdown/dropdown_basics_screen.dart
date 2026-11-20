@@ -1,5 +1,5 @@
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../widgets/showcase_widgets.dart';
 
@@ -96,7 +96,18 @@ class _DropdownBasicsScreenState extends State<DropdownBasicsScreen> {
                 onChanged: (value) => debugPrint('Menu picked: $value'),
               ),
               const SizedBox(height: 24),
-              sectionHeader('Multi-select'),
+              sectionHeader('Adaptive mode (iOS: action sheet / wheel picker)'),
+              ACDDropdownField<String>(
+                items: _skills,
+                mode: ACDDropdownMode.adaptive,
+                decoration: const InputDecoration(
+                  labelText: 'Skill (adaptive)',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (value) => debugPrint('Adaptive picked: $value'),
+              ),
+              const SizedBox(height: 24),
+              sectionHeader('Multi-select (removable chips)'),
               ACDMultiDropdownField<String>(
                 items: _skills,
                 decoration: const InputDecoration(

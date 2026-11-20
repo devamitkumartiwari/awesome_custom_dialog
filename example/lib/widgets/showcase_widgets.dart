@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/app_theme.dart';
+import 'design_switcher.dart';
 
 /// Small caption-style header used above a group of demos on a category
 /// screen. Pass [description] for a longer explanatory line underneath.
@@ -422,6 +423,7 @@ class CategoryScaffold extends StatelessWidget {
       appBar: AppBar(
         title: Text(title),
         backgroundColor: color?.withValues(alpha: 0.08),
+        actions: const [DesignSwitcherButton()],
         bottom: subtitle == null
             ? null
             : PreferredSize(

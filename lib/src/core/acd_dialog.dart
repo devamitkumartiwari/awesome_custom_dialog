@@ -1,7 +1,13 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../design/acd_design.dart';
+import '../design/acd_design_scope.dart';
+import '../design/internal/acd_adaptive_widgets.dart';
+import '../design/internal/acd_platform_support.dart';
 import 'acd_animation.dart';
 import 'acd_children.dart';
 import 'acd_content_type.dart';
@@ -29,7 +35,61 @@ class ACDDialog {
   /// Creates an empty dialog. Chain [build] and content-adding methods, then
   /// call [show]. Explicit unnamed constructor required because a factory
   /// constructor is also declared below ([ACDDialog.toast]).
-  ACDDialog();
+  ///
+  /// [design] picks Material (default), Cupertino, or adaptive rendering
+  /// for the dialog card, its buttons, lists and fields — see [ACDDesign].
+  ACDDialog({this.design});
+
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign]. Applies to
+  /// the card and to every builder method's content (buttons, lists, text
+  /// fields, progress). `null` defers to the nearest [ACDDesignScope].
+  ACDDesign? design;
+
+  /// Resolves [design] against [context] (scope, platform).
+  ACDResolvedDesign resolveDesign(BuildContext context) =>
+      ACDDesign.resolve(context, design);
+
+  // ── Result ────────────────────────────────────────────────────────────────
+  Completer<Object?>? _result;
+  Object? _pendingResult;
+
+  /// Sets the value [showForResult] completes with when this dialog is
+  /// dismissed. `ACDAction`s set it automatically from their `value`; call
+  /// it yourself from custom content, then [dismiss].
+  void setResult(Object? value) => _pendingResult = value;
+
+  void _completeResult(Object? fallback) {
+    final Completer<Object?>? c = _result;
+    _result = null;
+    final Object? value = _pendingResult ?? fallback;
+    _pendingResult = null;
+    if (c != null && !c.isCompleted) c.complete(value);
+  }
+
+  /// Like [show], but returns a future that completes when the dialog is
+  /// dismissed — with the chosen `ACDAction.value` (or the value passed to
+  /// [setResult]), or `null` when dismissed any other way (barrier tap,
+  /// back button, auto-dismiss).
+  ///
+  /// ```dart
+  /// final bool? delete = await ACDDialog(design: ACDDesign.adaptive)
+  ///     .build(context)
+  ///     .text(text: 'Delete this photo?')
+  ///     .actions(const [
+  ///       ACDAction(label: 'Cancel', role: ACDActionRole.cancel),
+  ///       ACDAction(label: 'Delete', role: ACDActionRole.destructive,
+  ///           value: true),
+  ///     ])
+  ///     .showForResult<bool>();
+  /// ```
+  Future<T?> showForResult<T>([double? x, double? y]) {
+    _completeResult(null); // settle any previous showing
+    final Completer<Object?> completer = Completer<Object?>();
+    _result = completer;
+    show(x, y);
+    if (context == null) _completeResult(null);
+    return completer.future.then((Object? v) => v is T ? v : null);
+  }
 
   // ── Widget content ────────────────────────────────────────────────────────
   /// The content widgets added so far via [widget] and the builder methods.
@@ -98,8 +158,10 @@ class ACDDialog {
   Decoration? decoration;
 
   /// Background color of the dialog card. Ignored when [backgroundGradient]
-  /// or [decoration] is set.
-  Color backgroundColor = Colors.white;
+  /// or [decoration] is set. `null` (the default) means white for Material
+  /// and the iOS translucent alert surface (with background blur) for
+  /// Cupertino.
+  Color? backgroundColor;
 
   /// Gradient fill, overriding [backgroundColor]. Ignored when [decoration]
   /// is set.
@@ -150,6 +212,15 @@ class ACDDialog {
 
   /// Accessibility label read out for the barrier behind the dialog.
   String barrierLabel = 'Dialog';
+
+  /// Whether system back (Android back button / predictive back gesture,
+  /// Esc) may close the dialog. `false` keeps it open — pair with
+  /// [onPopInvoked] to e.g. confirm discarding changes first.
+  bool canPop = true;
+
+  /// Called whenever a pop is attempted — `didPop` is `false` when
+  /// [canPop] blocked it.
+  PopInvokedWithResultCallback<Object?>? onPopInvoked;
 
   // ── New properties ────────────────────────────────────────────────────────
   /// If set, the dialog dismisses itself automatically after this duration.
@@ -205,6 +276,14 @@ class ACDDialog {
   bool _overlayMode = false;
   OverlayEntry? _overlayEntry;
 
+  // The modal-path presenter (owns the pushed route), so dismiss() removes
+  // this dialog's own route rather than popping whatever is on top.
+  ACD? _presenter;
+
+  // Pending autoDismissAfter timer — cancelled on dismiss/re-show so a stale
+  // timer from a previous showing can never close a later one.
+  Timer? _autoDismissTimer;
+
   // ── Toast-mode presentation ──────────────────────────────────────────────
   // Used by .toast(): delegates presentation/stacking/lifecycle entirely to
   // ACDToastManager instead of the plain overlay path above, so multiple
@@ -213,6 +292,11 @@ class ACDDialog {
   bool _toastMode = false;
   ACDToastConfig? _toastConfig;
   ACDToastController? _toastController;
+
+  /// For a dialog made with [ACDDialog.toast] / [ACDDialog.snackbar]-style
+  /// toasts: completes once the toast is gone, with why it closed. `null`
+  /// until [show] has been called (and for non-toast dialogs).
+  Future<ACDToastDismissReason>? get toastClosed => _toastController?.closed;
 
   // ── Static helpers ────────────────────────────────────────────────────────
 
@@ -268,6 +352,8 @@ class ACDDialog {
   factory ACDDialog.toast({
     required BuildContext context,
     required String message,
+    // Material (default) / Cupertino / adaptive — see ACDDesign.
+    ACDDesign? design,
     // Nullable so precedence between showDuration and length is
     // unambiguous — explicit showDuration always wins, length is a
     // convenience shortcut, and omitting both keeps the original 2-second
@@ -404,9 +490,10 @@ class ACDDialog {
       onCloseButtonTap: onCloseButtonTap,
       onAutoDismiss: onAutoDismiss,
       onShown: onShown,
+      design: design,
     );
 
-    return ACDDialog()
+    return ACDDialog(design: design)
       ..build(context)
       .._toastMode = true
       .._toastConfig = config;
@@ -422,6 +509,8 @@ class ACDDialog {
     required BuildContext context,
     required String title,
     required String message,
+    // Material (default) / Cupertino / adaptive — see ACDDesign.
+    ACDDesign? design,
     ACDContentType contentType = ACDContentType.success,
     Color? color,
     Gradient? gradient,
@@ -446,7 +535,7 @@ class ACDDialog {
     double elevation = 0,
     List<BoxShadow>? boxShadow,
   }) {
-    final dialog = ACDDialog()
+    final dialog = ACDDialog(design: design)
       ..build(context)
       .._overlayMode = true
       ..gravity = ACDGravity.bottom
@@ -482,6 +571,7 @@ class ACDDialog {
         // FEAT-16: default close action dismisses this overlay dialog, not a
         // ScaffoldMessenger — there isn't one involved in this code path.
         onClose: onClose ?? dialog.dismiss,
+        design: design,
       ),
     );
 
@@ -498,7 +588,26 @@ class ACDDialog {
     _contentVisible.value = true;
 
     if (_toastMode) {
-      _toastController = ACDToastManager.show(context!, _toastConfig!);
+      // Route the toast's own lifecycle into this dialog's callbacks, so
+      // dismissCallBack/showCallBack (and therefore ACDDialogQueue, which
+      // advances on dismissCallBack) work for toasts too — previously a
+      // queued toast never fired dismissCallBack and stalled the queue.
+      final ACDToastConfig config = _toastConfig!;
+      _toastController = ACDToastManager.show(
+        context!,
+        config.copyWith(
+          onShown: () {
+            config.onShown?.call();
+            showCallBack?.call();
+          },
+          onDismissed: () {
+            config.onDismissed?.call();
+            _isShowing = false;
+            _completeResult(null);
+            dismissCallBack?.call();
+          },
+        ),
+      );
       _isShowing = true;
       return;
     }
@@ -515,8 +624,9 @@ class ACDDialog {
     }
 
     final EdgeInsets effectiveMargin = _resolveMargin();
-    final Function(Widget, Animation<double>)? effectiveAnimFn =
-        _resolveAnimFn();
+    final Function(Widget, Animation<double>)? effectiveAnimFn = _resolveAnimFn(
+      acdReduceMotion(context!),
+    );
 
     Widget dialogContent = Padding(
       padding: effectiveMargin,
@@ -538,7 +648,7 @@ class ACDDialog {
       dialogContent = SafeArea(child: dialogContent);
     }
 
-    ACD(
+    _presenter = ACD(
       child: dialogContent,
       context: context!,
       gravity: gravity,
@@ -549,10 +659,15 @@ class ACDDialog {
       duration: duration,
       useRootNavigator: useRootNavigator,
       // BUG-03 fix
-      barrierLabel: barrierLabel,
+      barrierLabel: barrierLabel == 'Dialog'
+          ? ACDDesignScope.stringsOf(context!).dialogLabel
+          : barrierLabel,
       // IMP-08
       onBarrierTap: onBarrierTap, // FEAT-12
       textDirection: textDirection,
+      cupertinoTransition: resolveDesign(context!).isCupertino,
+      canPop: canPop,
+      onPopInvoked: onPopInvoked,
     );
 
     _scheduleAutoDismiss();
@@ -569,8 +684,15 @@ class ACDDialog {
       _isShowing = false;
       return;
     }
-    if (!_isShowing) return;
+    // _isShowing only flips true after the first frame (ACDChildren.onShown),
+    // so also treat a still-active route/overlay entry as "showing" — a
+    // dismiss() issued right after show() must still close the dialog.
+    final bool presented =
+        (_presenter?.route.isActive ?? false) || _overlayEntry != null;
+    if (!_isShowing && !presented) return;
     _isShowing = false;
+    _autoDismissTimer?.cancel();
+    _autoDismissTimer = null;
 
     final ACDStaggerOptions? options = contentStagger;
     if (options != null && widgetList.isNotEmpty) {
@@ -588,7 +710,8 @@ class ACDDialog {
       _overlayEntry!.remove();
       _overlayEntry = null;
     } else {
-      Navigator.of(context!, rootNavigator: useRootNavigator).pop();
+      _presenter?.close();
+      _presenter = null;
     }
   }
 
@@ -598,18 +721,43 @@ class ACDDialog {
       acdResolveMarginForGravity(gravity, margin, textDirection);
 
   // Resolve animation function: explicit > preset enum > none
-  Function(Widget, Animation<double>)? _resolveAnimFn() {
+  // Under reduce motion, built-in presets are dropped (the presenter then
+  // fades); an explicit animatedFunc is the caller's choice and is kept.
+  Function(Widget, Animation<double>)? _resolveAnimFn(bool reduceMotion) {
+    if (animatedFunc == null && reduceMotion) return null;
     return animatedFunc ??
         (animation != ACDAnimation.none
             ? acdPresetAnimFn(animation, textDirection)
             : null);
   }
 
-  Widget _buildContentCard() {
+  // The card is built lazily inside the presented route, so the design (and
+  // dark-mode tokens) resolve against the route's own context.
+  Widget _buildContentCard() => Builder(builder: _buildContentCardIn);
+
+  Widget _buildContentCardIn(BuildContext context) {
+    final ACDResolvedDesign resolved = resolveDesign(context);
+    final bool cupertino = resolved.isCupertino;
+    // iOS alert surface: translucent + blurred, resolved for brightness.
+    final bool blurSurface =
+        cupertino &&
+        !useTheme &&
+        backgroundColor == null &&
+        backgroundGradient == null &&
+        decoration == null;
     // IMP-10: use theme background when requested
     final Color effectiveBg = useTheme
-        ? (Theme.of(context!).dialogTheme.backgroundColor ?? Colors.white)
-        : backgroundColor;
+        ? (Theme.of(context).dialogTheme.backgroundColor ?? Colors.white)
+        : backgroundColor ??
+              (cupertino
+                  ? CupertinoDynamicColor.resolve(
+                      const CupertinoDynamicColor.withBrightness(
+                        color: Color(0xCCF2F2F2),
+                        darkColor: Color(0xBF1E1E1E),
+                      ),
+                      context,
+                    )
+                  : Colors.white);
     final BorderRadius effectiveRadius =
         cornerRadius ?? BorderRadius.circular(borderRadius);
 
@@ -623,6 +771,7 @@ class ACDDialog {
       },
       onDismissed: () {
         _isShowing = false;
+        _completeResult(null);
         dismissCallBack?.call();
       },
     );
@@ -632,29 +781,38 @@ class ACDDialog {
     // color/gradient/image fill as the default rounded-rect case — unlike
     // ACDToastConfig.shape, which is limited to a flat color fill.
     // decoration remains a full escape hatch overriding all of the above.
-    final Widget card = Material(
+    Widget body = Container(
+      width: width,
+      height: height,
+      decoration:
+          decoration ??
+          ShapeDecoration(
+            shape:
+                shape ?? RoundedRectangleBorder(borderRadius: effectiveRadius),
+            // ShapeDecoration (unlike BoxDecoration) forbids setting both
+            // color and gradient at once — gradient wins when set.
+            color: backgroundGradient == null ? effectiveBg : null,
+            gradient: backgroundGradient,
+            image: backgroundImage,
+          ),
+      constraints: constraints ?? const BoxConstraints(),
+      child: content,
+    );
+    if (blurSurface) {
+      // The clip below bounds the blur to the card's shape.
+      body = BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: body,
+      );
+    }
+    // Material: transparent Material (ink + text style), as before.
+    // Cupertino: clip + Cupertino text style, no Material ancestor.
+    final Widget card = ACDAdaptiveSurface(
+      design: resolved,
       clipBehavior: Clip.antiAlias,
-      type: MaterialType.transparency,
       shape: shape,
       borderRadius: shape == null ? effectiveRadius : null,
-      child: Container(
-        width: width,
-        height: height,
-        decoration:
-            decoration ??
-            ShapeDecoration(
-              shape:
-                  shape ??
-                  RoundedRectangleBorder(borderRadius: effectiveRadius),
-              // ShapeDecoration (unlike BoxDecoration) forbids setting both
-              // color and gradient at once — gradient wins when set.
-              color: backgroundGradient == null ? effectiveBg : null,
-              gradient: backgroundGradient,
-              image: backgroundImage,
-            ),
-        constraints: constraints ?? const BoxConstraints(),
-        child: content,
-      ),
+      child: body,
     );
 
     // Shadow always on the outermost, unclipped layer — a clip wrapper
@@ -679,9 +837,12 @@ class ACDDialog {
 
   void _scheduleAutoDismiss() {
     // FEAT-02: auto-dismiss timer
+    _autoDismissTimer?.cancel();
+    _autoDismissTimer = null;
     if (autoDismissAfter != null) {
-      Timer(autoDismissAfter!, () {
-        if (_isShowing) dismiss();
+      _autoDismissTimer = Timer(autoDismissAfter!, () {
+        _autoDismissTimer = null;
+        dismiss();
       });
     }
   }
@@ -695,8 +856,9 @@ class ACDDialog {
       rootOverlay: useRootNavigator,
     );
     final EdgeInsets effectiveMargin = _resolveMargin();
-    final Function(Widget, Animation<double>)? effectiveAnimFn =
-        _resolveAnimFn();
+    final Function(Widget, Animation<double>)? effectiveAnimFn = _resolveAnimFn(
+      acdReduceMotion(context!),
+    );
 
     final bool topSafe =
         gravity == ACDGravity.top ||

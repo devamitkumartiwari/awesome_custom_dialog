@@ -1,5 +1,6 @@
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -276,5 +277,52 @@ void main() {
     for (final digit in ['9', '8', '7', '6']) {
       expect(findCellText(digit), findsOneWidget);
     }
+  });
+
+  testWidgets('a caret/selection-only change does not fire onChanged '
+      '(regression: every controller notification was treated as an edit)', (
+    tester,
+  ) async {
+    final TextEditingController controller = TextEditingController(text: '12');
+    addTearDown(controller.dispose);
+    int changes = 0;
+    await tester.pumpWidget(
+      wrap(
+        ACDPinField(
+          length: 4,
+          controller: controller,
+          onChanged: (_) => changes++,
+        ),
+      ),
+    );
+
+    controller.selection = const TextSelection.collapsed(offset: 0);
+    await tester.pump();
+    expect(changes, 0);
+
+    controller.text = '123';
+    await tester.pump();
+    expect(changes, 1);
+  });
+
+  testWidgets('caller inputFormatters run before the length limit, so a pasted '
+      '"123 456" keeps all six digits (regression: was cut to "12345")', (
+    tester,
+  ) async {
+    String? completed;
+    await tester.pumpWidget(
+      wrap(
+        ACDPinField(
+          length: 6,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          onCompleted: (v) => completed = v,
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(EditableText), '123 456');
+    await tester.pump();
+
+    expect(completed, '123456');
   });
 }

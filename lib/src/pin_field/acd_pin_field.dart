@@ -1,9 +1,16 @@
+import 'dart:math' as math;
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../design/acd_design.dart';
+import '../design/acd_design_scope.dart';
+import '../design/acd_design_tokens.dart';
+import '../design/internal/acd_platform_support.dart';
 import 'acd_pin_animation_type.dart';
+import 'acd_pin_error_animation.dart';
 import 'acd_pin_field_state.dart';
 import 'acd_pin_theme.dart';
 import 'acd_pin_theme_resolve.dart';
@@ -147,6 +154,14 @@ class ACDPinField extends FormField<String> {
     // left-to-right even in RTL apps (Arabic/Hebrew banking apps included).
     // Pass TextDirection.rtl explicitly to opt into mirrored cell order.
     TextDirection textDirection = TextDirection.ltr,
+    // Material (default) / Cupertino / adaptive — see ACDDesign.
+    ACDDesign? design,
+    // How the cells react when an error appears (default: a short shake,
+    // skipped under reduce motion).
+    ACDPinErrorAnimation errorAnimation = ACDPinErrorAnimation.shake,
+    // Clears the entered digits when an error appears, so the user can
+    // retype straight away.
+    bool clearOnError = false,
   }) : assert(length > 0, 'length must be greater than 0'),
        assert(
          initialValue == null || initialValue.length <= length,
@@ -231,6 +246,9 @@ class ACDPinField extends FormField<String> {
              wrapSpacing: wrapSpacing,
              wrapRunSpacing: wrapRunSpacing,
              textDirection: textDirection,
+             design: design,
+             errorAnimation: errorAnimation,
+             clearOnError: clearOnError,
            );
          },
        );
@@ -308,7 +326,14 @@ class _ACDPinFieldRenderer extends StatefulWidget {
     required this.wrapSpacing,
     required this.wrapRunSpacing,
     required this.textDirection,
+    required this.design,
+    required this.errorAnimation,
+    required this.clearOnError,
   });
+
+  final ACDDesign? design;
+  final ACDPinErrorAnimation errorAnimation;
+  final bool clearOnError;
 
   final FormFieldState<String> field;
   final int length;
@@ -386,13 +411,21 @@ class _ACDPinFieldRenderer extends StatefulWidget {
 }
 
 class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   TextEditingController? _ownedController;
   FocusNode? _ownedFocusNode;
   AnimationController? _cursorController;
+
+  // Error shake: created on first use only.
+  AnimationController? _shakeController;
+  bool _hadError = false;
   final Map<int, Timer> _revealTimers = {};
   final Set<int> _revealedIndices = {};
   bool _completedFired = false;
+
+  // Last text seen by _handleTextChanged — the controller also notifies on
+  // selection/caret-only changes, which must not fire onChanged/haptics.
+  String? _lastText;
 
   TextEditingController get _controller =>
       widget.controller ??
@@ -408,13 +441,37 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
   @override
   void initState() {
     super.initState();
+    _lastText = _controller.text;
     _controller.addListener(_handleTextChanged);
     _focusNode.addListener(_handleFocusChanged);
     if (widget.enableCursorAnimation && widget.showCursor) {
       _cursorController = AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 500),
-      )..repeat(reverse: true);
+        value: 1,
+      );
+      // Started in didChangeDependencies once reduce-motion is readable.
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncCursorAnimation();
+  }
+
+  /// Blink the caret only while focused and when motion is allowed — an
+  /// idle field must not schedule a frame every 500ms forever.
+  void _syncCursorAnimation() {
+    final AnimationController? c = _cursorController;
+    if (c == null) return;
+    final bool run = _focusNode.hasFocus && !acdReduceMotion(context);
+    if (run && !c.isAnimating) {
+      c.repeat(reverse: true);
+    } else if (!run && c.isAnimating) {
+      c
+        ..stop()
+        ..value = 1;
     }
   }
 
@@ -424,6 +481,7 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller?.removeListener(_handleTextChanged);
       _ownedController?.removeListener(_handleTextChanged);
+      _lastText = _controller.text;
       _controller.addListener(_handleTextChanged);
     }
     if (oldWidget.focusNode != widget.focusNode) {
@@ -437,11 +495,13 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
       _cursorController = AnimationController(
         vsync: this,
         duration: const Duration(milliseconds: 500),
-      )..repeat(reverse: true);
+        value: 1,
+      );
     } else if (!wantsCursorAnim && _cursorController != null) {
       _cursorController!.dispose();
       _cursorController = null;
     }
+    _syncCursorAnimation();
   }
 
   @override
@@ -451,6 +511,7 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
     _ownedController?.dispose();
     _ownedFocusNode?.dispose();
     _cursorController?.dispose();
+    _shakeController?.dispose();
     for (final Timer timer in _revealTimers.values) {
       timer.cancel();
     }
@@ -459,6 +520,12 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
 
   void _handleTextChanged() {
     final String text = _controller.text;
+    if (text == _lastText) {
+      // Selection/caret-only change: just repaint the caret cell.
+      setState(() {});
+      return;
+    }
+    _lastText = text;
     widget.field.didChange(text);
     widget.onChanged?.call(text);
     _maybeScheduleReveal(text);
@@ -515,6 +582,7 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
   }
 
   void _handleFocusChanged() {
+    _syncCursorAnimation();
     setState(() {});
     if (_focusNode.hasFocus) _maybeCheckClipboard();
   }
@@ -545,24 +613,81 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
     return const ACDPinCellDefault();
   }
 
-  /// A sensible out-of-the-box focus indication (a themed border) when the
-  /// caller hasn't supplied [ACDPinField.focusedPinTheme] — matching how a
-  /// platform `TextField` highlights focus by default, rather than leaving
-  /// the focused cell visually identical to an idle one.
-  ACDPinTheme _defaultFocusedTheme(BuildContext context) => ACDPinTheme(
-    borderColor: Theme.of(context).colorScheme.primary,
-    borderWidth: 2,
-  );
+  /// Default idle cell decoration when the caller supplies no theme
+  /// decoration. Material light keeps the original outlined look; Material
+  /// dark uses the scheme outline (the old fixed grey was near-invisible on
+  /// dark surfaces); Cupertino uses iOS filled, rounded cells.
+  BoxDecoration _defaultCellDecoration(
+    ACDResolvedDesign design,
+    ACDDesignTokens tokens,
+  ) {
+    if (design.isCupertino) {
+      return BoxDecoration(
+        color: tokens.track,
+        borderRadius: BorderRadius.circular(10),
+      );
+    }
+    return BoxDecoration(
+      border: Border.all(
+        color: tokens.brightness == Brightness.dark
+            ? tokens.outline
+            : const Color(0xFFB8C7CB),
+      ),
+      borderRadius: BorderRadius.circular(8),
+    );
+  }
 
-  /// A sensible out-of-the-box error indication when the caller hasn't
-  /// supplied [ACDPinField.errorPinTheme].
-  ACDPinTheme _defaultErrorTheme(BuildContext context) => ACDPinTheme(
-    borderColor: Theme.of(context).colorScheme.error,
-    borderWidth: 2,
-  );
+  /// Reacts once when an error *appears* (validate / forceErrorText):
+  /// shake (unless reduce motion), an error haptic on iOS, and optionally
+  /// clear the digits. Runs post-frame — never animates during build.
+  void _onErrorAppeared(ACDResolvedDesign design) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (design.isCupertino) ACDHaptics.heavy(context);
+      if (widget.errorAnimation == ACDPinErrorAnimation.shake &&
+          !acdReduceMotion(context)) {
+        if (_shakeController == null) {
+          // First shake: rebuild so the AnimatedBuilder subscribes to it.
+          setState(() {
+            _shakeController = AnimationController(
+              vsync: this,
+              duration: const Duration(milliseconds: 400),
+            );
+          });
+        }
+        _shakeController!.forward(from: 0);
+      }
+      if (widget.clearOnError && _controller.text.isNotEmpty) {
+        _controller.clear();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    // Resolved once per build (not per cell).
+    final ACDResolvedDesign design = ACDDesign.resolve(context, widget.design);
+    final bool hasError = widget.field.hasError;
+    if (hasError && !_hadError) _onErrorAppeared(design);
+    _hadError = hasError;
+    final ACDDesignTokens tokens = ACDDesignTokens.of(context, design);
+    // Sensible out-of-the-box focus/error indication when the caller
+    // supplies no focused/error theme — a focused cell must never look
+    // identical to an idle one.
+    final ACDPinTheme defaultFocusedTheme = ACDPinTheme(
+      borderColor: tokens.primary,
+      borderWidth: 2,
+    );
+    final ACDPinTheme defaultErrorTheme = ACDPinTheme(
+      borderColor: tokens.error,
+      borderWidth: 2,
+    );
+    final BoxDecoration defaultCellDecoration = _defaultCellDecoration(
+      design,
+      tokens,
+    );
+    final Color caretColor = widget.cursorColor ?? tokens.primary;
+
     final TextEditingValue value = _controller.value;
     final String text = value.text;
     final int caretIndex = value.selection.isValid
@@ -592,11 +717,10 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
           theme: acdResolvePinTheme(
             state,
             defaultTheme: widget.pinTheme,
-            focusedTheme:
-                widget.focusedPinTheme ?? _defaultFocusedTheme(context),
+            focusedTheme: widget.focusedPinTheme ?? defaultFocusedTheme,
             submittedTheme: widget.submittedPinTheme,
             followingTheme: widget.followingPinTheme,
-            errorTheme: widget.errorPinTheme ?? _defaultErrorTheme(context),
+            errorTheme: widget.errorPinTheme ?? defaultErrorTheme,
             disabledTheme: widget.disabledPinTheme,
           ),
           preFilledWidget: widget.preFilledWidget,
@@ -611,7 +735,8 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
           animationDuration: widget.animationDuration,
           animationCurve: widget.animationCurve,
           cursor: widget.cursor,
-          cursorColor: widget.cursorColor,
+          cursorColor: caretColor,
+          defaultDecoration: defaultCellDecoration,
           cursorWidth: widget.cursorWidth,
           cursorHeight: widget.cursorHeight,
           cursorRadius: widget.cursorRadius,
@@ -646,54 +771,111 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
     // those gestures before the TextField's own (well-tested) selection
     // handling ever saw them — exactly the kind of hand-rolled selection
     // logic this architecture exists to avoid.
+    final EditableTextContextMenuBuilder? menuBuilder = widget.toolbarEnabled
+        ? widget.contextMenuBuilder
+        : (context, state) => const SizedBox.shrink();
+    // Caller formatters run first; the field's own maxLength limiter
+    // (appended after them) then truncates. Limiting first truncated pasted
+    // codes like "123 456" before a digits-only formatter could strip the
+    // space.
+    final Widget hiddenField = switch (design) {
+      ACDResolvedDesign.material => acdEnsureMaterial(
+        context,
+        TextField(
+          controller: _controller,
+          focusNode: _focusNode,
+          autofocus: widget.autofocus,
+          enabled: widget.enabled,
+          readOnly: widget.readOnly,
+          showCursor: false,
+          obscureText: widget.obscureText,
+          autocorrect: false,
+          enableInteractiveSelection: widget.enableInteractiveSelection,
+          enableSuggestions: widget.enableSuggestions,
+          enableIMEPersonalizedLearning: widget.enableIMEPersonalizedLearning,
+          cursorColor: Colors.transparent,
+          style: const TextStyle(color: Colors.transparent, fontSize: 16),
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            counterText: '',
+            isDense: true,
+            contentPadding: EdgeInsets.zero,
+          ),
+          keyboardType: widget.keyboardType,
+          textInputAction: widget.textInputAction,
+          textCapitalization: widget.textCapitalization,
+          keyboardAppearance: widget.keyboardAppearance,
+          mouseCursor: widget.mouseCursor,
+          maxLength: widget.length,
+          scrollPadding: widget.scrollPadding,
+          restorationId: widget.restorationId,
+          contextMenuBuilder: menuBuilder,
+          onTap: _requestFocus,
+          onTapOutside: widget.onTapOutside,
+          onTapUpOutside: widget.onTapUpOutside,
+          onSubmitted: widget.onSubmitted,
+          inputFormatters: widget.inputFormatters,
+          autofillHints: widget.enableAutofill ? widget.autofillHints : null,
+        ),
+      ),
+      // iOS: a real CupertinoTextField — native paste menu and selection,
+      // and no Material ancestor/localizations required.
+      // cupertino_ui 1.1.7 types CupertinoTextField.onTapUpOutside as a
+      // pointer-*down* callback, so deliver onTapUpOutside through a
+      // TapRegion sharing the text field's group instead.
+      ACDResolvedDesign.cupertino => TapRegion(
+        groupId: EditableText,
+        onTapUpOutside: widget.onTapUpOutside,
+        child: CupertinoTextField(
+          controller: _controller,
+          focusNode: _focusNode,
+          autofocus: widget.autofocus,
+          enabled: widget.enabled,
+          readOnly: widget.readOnly,
+          showCursor: false,
+          obscureText: widget.obscureText,
+          autocorrect: false,
+          enableInteractiveSelection: widget.enableInteractiveSelection,
+          enableSuggestions: widget.enableSuggestions,
+          enableIMEPersonalizedLearning: widget.enableIMEPersonalizedLearning,
+          cursorColor: const Color(0x00000000),
+          style: const TextStyle(color: Color(0x00000000), fontSize: 16),
+          decoration: null,
+          padding: EdgeInsets.zero,
+          keyboardType: widget.keyboardType,
+          textInputAction: widget.textInputAction,
+          textCapitalization: widget.textCapitalization,
+          keyboardAppearance: widget.keyboardAppearance,
+          maxLength: widget.length,
+          scrollPadding: widget.scrollPadding,
+          restorationId: widget.restorationId,
+          contextMenuBuilder: menuBuilder,
+          onTap: _requestFocus,
+          onTapOutside: widget.onTapOutside,
+          onSubmitted: widget.onSubmitted,
+          inputFormatters: widget.inputFormatters,
+          autofillHints: widget.enableAutofill ? widget.autofillHints : null,
+        ),
+      ),
+    };
+
     final Widget stack = Stack(
       alignment: Alignment.center,
       children: [
-        IgnorePointer(child: cellsRow),
+        // The visible cells are a pure presentation layer: excluded from
+        // semantics so screen readers announce one labelled PIN field (and
+        // never read obscured digits cell by cell).
+        IgnorePointer(child: ExcludeSemantics(child: cellsRow)),
         Positioned.fill(
-          child: Opacity(
-            opacity: 0.0,
-            child: TextField(
-              controller: _controller,
-              focusNode: _focusNode,
-              autofocus: widget.autofocus,
-              enabled: widget.enabled,
-              readOnly: widget.readOnly,
-              showCursor: false,
-              enableInteractiveSelection: widget.enableInteractiveSelection,
-              enableSuggestions: widget.enableSuggestions,
-              enableIMEPersonalizedLearning:
-                  widget.enableIMEPersonalizedLearning,
-              cursorColor: Colors.transparent,
-              style: const TextStyle(color: Colors.transparent, fontSize: 16),
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                counterText: '',
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
-              keyboardType: widget.keyboardType,
-              textInputAction: widget.textInputAction,
-              textCapitalization: widget.textCapitalization,
-              keyboardAppearance: widget.keyboardAppearance,
-              mouseCursor: widget.mouseCursor,
-              maxLength: widget.length,
-              scrollPadding: widget.scrollPadding,
-              restorationId: widget.restorationId,
-              contextMenuBuilder: widget.toolbarEnabled
-                  ? widget.contextMenuBuilder
-                  : (context, state) => const SizedBox.shrink(),
-              onTap: _requestFocus,
-              onTapOutside: widget.onTapOutside,
-              onTapUpOutside: widget.onTapUpOutside,
-              onSubmitted: widget.onSubmitted,
-              inputFormatters: [
-                LengthLimitingTextInputFormatter(widget.length),
-                ...?widget.inputFormatters,
-              ],
-              autofillHints: widget.enableAutofill
-                  ? widget.autofillHints
-                  : null,
+          child: Semantics(
+            label: ACDDesignScope.stringsOf(context)
+                .pinFieldLabel(text.length, widget.length),
+            // Invisible, but must stay in the semantics tree — opacity 0
+            // would otherwise drop the field for screen readers entirely.
+            child: Opacity(
+              opacity: 0.0,
+              alwaysIncludeSemantics: true,
+              child: hiddenField,
             ),
           ),
         ),
@@ -725,20 +907,40 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              stack,
+              // Always the same wrapper (even before the first error), so
+              // creating the shake controller never remounts the hidden
+              // text field and drops focus.
+              RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: _shakeController ?? kAlwaysDismissedAnimation,
+                  builder: (context, child) {
+                    // 4 decaying oscillations of up to 8 px.
+                    // Always a Transform (offset 0 at rest): switching the
+                    // wrapper type mid-shake would remount the field too.
+                    final double t = _shakeController?.value ?? 0;
+                    final double dx =
+                        math.sin(t * 4 * 2 * math.pi) * 8 * (1 - t);
+                    return Transform.translate(
+                      offset: Offset(dx, 0),
+                      child: child,
+                    );
+                  },
+                  child: stack,
+                ),
+              ),
               if (showFieldError)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child:
                       widget.errorBuilder?.call(widget.field.errorText, text) ??
-                      Text(
-                        widget.field.errorText ?? '',
-                        style:
-                            widget.errorTextStyle ??
-                            TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                              fontSize: 12,
-                            ),
+                      Semantics(
+                        liveRegion: true,
+                        child: Text(
+                          widget.field.errorText ?? '',
+                          style:
+                              widget.errorTextStyle ??
+                              TextStyle(color: tokens.error, fontSize: 12),
+                        ),
                       ),
                 ),
             ],
@@ -774,6 +976,7 @@ class _ACDPinCell extends StatelessWidget {
     required this.cursorHeight,
     required this.cursorRadius,
     required this.cursorAnimation,
+    required this.defaultDecoration,
   });
 
   final int index;
@@ -798,6 +1001,7 @@ class _ACDPinCell extends StatelessWidget {
   final double? cursorHeight;
   final Radius? cursorRadius;
   final Animation<double>? cursorAnimation;
+  final BoxDecoration defaultDecoration;
 
   Widget _buildContent(BuildContext context) {
     if (char.isEmpty) return preFilledWidget ?? const SizedBox.shrink();
@@ -865,7 +1069,7 @@ class _ACDPinCell extends StatelessWidget {
         width: cursorWidth,
         height: cursorHeight ?? (theme.height ?? 52.0) * 0.5,
         decoration: BoxDecoration(
-          color: cursorColor ?? Theme.of(context).colorScheme.primary,
+          color: cursorColor,
           borderRadius: cursorRadius != null
               ? BorderRadius.all(cursorRadius!)
               : null,
@@ -899,12 +1103,7 @@ class _ACDPinCell extends StatelessWidget {
       margin: theme.margin,
       padding: theme.padding,
       constraints: theme.constraints,
-      decoration:
-          theme.resolveDecoration() ??
-          BoxDecoration(
-            border: Border.all(color: const Color(0xFFB8C7CB)),
-            borderRadius: BorderRadius.circular(8),
-          ),
+      decoration: theme.resolveDecoration() ?? defaultDecoration,
       alignment: Alignment.center,
       child: content,
     );

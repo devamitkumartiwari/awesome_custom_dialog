@@ -2,8 +2,9 @@ import 'dart:async' show Completer, Timer, unawaited;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../design/internal/acd_platform_support.dart';
 import 'acd_motion.dart';
 import 'acd_motion_effect.dart';
 import 'acd_rest_effect_config.dart';
@@ -49,10 +50,9 @@ _evaluateTextEffect(ACDMotionEffect effect, double t) {
 /// [ACDRestEffectConfig] with the [ACDMotion] family.
 ///
 /// Grapheme-cluster aware (correct with emoji/combining marks, via
-/// `String.characters`) and respects `Directionality`/[textDirection] for
-/// stagger order without disturbing bidi text shaping — only the
-/// stagger-timing assignment reverses under RTL, never the rendered
-/// character order. The whole stagger is driven by a single
+/// `String.characters`) and respects `Directionality`/[textDirection]:
+/// characters stagger in reading order, so under RTL the sweep starts at
+/// the right edge, without disturbing bidi text shaping. The whole stagger is driven by a single
 /// [AnimationController], so [onComplete] fires deterministically even
 /// when [text] ends in whitespace.
 ///
@@ -142,8 +142,8 @@ class ACDAnimatedText extends StatefulWidget {
   /// Overflow behavior.
   final TextOverflow overflow;
 
-  /// Explicit RTL override for stagger order. Defaults to the ambient
-  /// `Directionality`.
+  /// Text direction for layout and stagger order (the stagger always
+  /// follows reading order). Defaults to the ambient `Directionality`.
   final TextDirection? textDirection;
 
   @override
@@ -161,7 +161,20 @@ class _ACDAnimatedTextState extends State<ACDAnimatedText>
   @override
   void initState() {
     super.initState();
-    unawaited(_playEntrance());
+    // Started from didChangeDependencies (runs synchronously right after
+    // initState): the entrance reads reduce-motion from MediaQuery, which
+    // isn't readable inside initState.
+  }
+
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_started) {
+      _started = true;
+      unawaited(_playEntrance());
+    }
   }
 
   @override
@@ -187,36 +200,56 @@ class _ACDAnimatedTextState extends State<ACDAnimatedText>
       await completer.future;
       if (!mounted) return;
     }
-    await _staggerController.forward(from: 0);
+    // Size the controller before starting: changing `duration` mid-run
+    // doesn't affect the active simulation, so leaving this to build() made
+    // the very first entrance finish in the 1ms placeholder duration.
+    _staggerController.duration = _totalDuration(
+      _computeLogicalStartOffsets(widget.text.characters.toList()),
+    );
+    if (acdReduceMotion(context)) {
+      _staggerController.value = 1; // show the text at once
+    } else {
+      try {
+        await _staggerController.forward(from: 0).orCancel;
+      } on TickerCanceled {
+        return; // superseded by a newer entrance
+      }
+    }
     if (mounted) widget.onComplete?.call();
   }
 
-  List<Duration> _computeLogicalStartOffsets(List<String> chars, bool rtl) {
-    final int n = chars.length;
-    final List<Duration> byStaggerIndex = List<Duration>.filled(
-      n,
+  /// Start offset for each character, staggered in logical (reading) order.
+  ///
+  /// Since Flutter 3.50, text layout places [WidgetSpan]s in bidirectional
+  /// visual order, so logical order already sweeps right-to-left under RTL —
+  /// no direction-specific reordering is needed (or correct) here.
+  List<Duration> _computeLogicalStartOffsets(List<String> chars) {
+    final List<Duration> starts = List<Duration>.filled(
+      chars.length,
       Duration.zero,
     );
     Duration running = Duration.zero;
-    for (int s = 0; s < n; s++) {
-      byStaggerIndex[s] = running;
-      final int logicalAtS = rtl ? n - 1 - s : s;
-      final bool isSpace = chars[logicalAtS].trim().isEmpty;
+    for (int i = 0; i < chars.length; i++) {
+      starts[i] = running;
+      final bool isSpace = chars[i].trim().isEmpty;
       running += isSpace
           ? (widget.spaceDelay ?? widget.staggerDelay)
           : widget.staggerDelay;
     }
-    return [
-      for (int logical = 0; logical < n; logical++)
-        byStaggerIndex[rtl ? n - 1 - logical : logical],
-    ];
+    return starts;
+  }
+
+  Duration _totalDuration(List<Duration> starts) {
+    final Duration span = starts.isEmpty
+        ? Duration.zero
+        : starts.reduce((a, b) => a > b ? a : b);
+    return span + widget.charDuration;
   }
 
   Widget _buildStaggeredText(BuildContext context) {
     final List<String> chars = widget.text.characters.toList();
     final TextDirection direction =
         widget.textDirection ?? Directionality.of(context);
-    final bool rtl = direction == TextDirection.rtl;
     final TextStyle effectiveStyle =
         widget.style ?? DefaultTextStyle.of(context).style;
 
@@ -230,9 +263,8 @@ class _ACDAnimatedTextState extends State<ACDAnimatedText>
       );
     }
 
-    final List<Duration> starts = _computeLogicalStartOffsets(chars, rtl);
-    final Duration span = starts.reduce((a, b) => a > b ? a : b);
-    final Duration total = span + widget.charDuration;
+    final List<Duration> starts = _computeLogicalStartOffsets(chars);
+    final Duration total = _totalDuration(starts);
     final int totalMicros = total.inMicroseconds == 0
         ? 1
         : total.inMicroseconds;
@@ -285,6 +317,7 @@ class _ACDAnimatedTextState extends State<ACDAnimatedText>
             ),
         ],
       ),
+      textDirection: direction,
       textAlign: widget.textAlign ?? TextAlign.start,
       maxLines: widget.maxLines,
       overflow: widget.overflow,
@@ -300,7 +333,12 @@ class _ACDAnimatedTextState extends State<ACDAnimatedText>
       autoStart: false,
       restEffect: widget.restEffect,
       onExitComplete: widget.onExitComplete,
-      child: _buildStaggeredText(context),
+      // Screen readers get the whole string once — not one letter per
+      // animated glyph span.
+      child: Semantics(
+        label: widget.text,
+        child: ExcludeSemantics(child: _buildStaggeredText(context)),
+      ),
     );
   }
 }

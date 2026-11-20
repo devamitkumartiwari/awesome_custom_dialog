@@ -1,5 +1,5 @@
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../widgets/showcase_widgets.dart';
 
@@ -101,6 +101,38 @@ ACDCircularPercentIndicator(
   fillMode: ACDLoaderFillMode.pie, // or .ring (default)
   arcType: ACDLoaderArcType.half,   // or .full / .fullReversed
 )''',
+        ),
+        const SizedBox(height: 24),
+        sectionHeader('Indeterminate & wavy (Material 3 Expressive)'),
+        const ACDLinearPercentIndicator(indeterminate: true, lineHeight: 6),
+        const SizedBox(height: 16),
+        ACDLinearPercentIndicator(
+          value: _value,
+          lineHeight: 10,
+          style: ACDLoaderStyle.wavy,
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            const ACDCircularPercentIndicator(
+              radius: 28,
+              lineWidth: 5,
+              indeterminate: true, // iOS spinner under the Cupertino design
+            ),
+            ACDCircularPercentIndicator(
+              radius: 28,
+              lineWidth: 5,
+              value: _value,
+              style: ACDLoaderStyle.wavy,
+            ),
+          ],
+        ),
+        const CodeSnippet(
+          code: '''
+ACDLinearPercentIndicator(indeterminate: true)
+ACDLinearPercentIndicator(value: 0.6, style: ACDLoaderStyle.wavy)
+ACDCircularPercentIndicator(radius: 28, indeterminate: true)''',
         ),
         const SizedBox(height: 24),
         sectionHeader('Multi-segment'),

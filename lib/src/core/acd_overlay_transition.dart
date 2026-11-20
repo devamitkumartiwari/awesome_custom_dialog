@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 // FEAT-15/FEAT-16: drives the entrance animation for overlay-mode
 // presentation without a route-provided AnimationController (none exists

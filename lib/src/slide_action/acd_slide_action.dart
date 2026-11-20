@@ -1,9 +1,17 @@
 import 'dart:async' show unawaited;
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:flutter/physics.dart';
+
+import '../design/internal/acd_physics.dart';
+
 import 'package:flutter/services.dart';
 
+import '../design/acd_design.dart';
+import '../design/acd_design_tokens.dart';
+import '../design/internal/acd_adaptive_widgets.dart';
+import '../design/internal/acd_platform_support.dart';
 import 'acd_slide_action_controller.dart';
 import 'acd_slide_action_direction.dart';
 import 'acd_slide_action_shape.dart';
@@ -56,6 +64,7 @@ class ACDSlideAction extends StatefulWidget {
     this.snapBackDuration = const Duration(milliseconds: 300),
     this.animationDuration = const Duration(milliseconds: 250),
     this.animationCurve = Curves.easeOut,
+    this.design,
     this.enabled = true,
     this.thumbColor,
     this.activeThumbColor,
@@ -160,6 +169,10 @@ class ACDSlideAction extends StatefulWidget {
   /// Fired once a drag crosses [dismissThreshold] and is released. Typically
   /// drives [controller] through `loading()`/`success()`/`reset()`.
   final VoidCallback onConfirm;
+
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign]. Affects
+  /// the default track color and the loading spinner.
+  final ACDDesign? design;
 
   /// Drives the post-confirm lifecycle from outside the widget. Owned and
   /// disposed internally when left null.
@@ -361,14 +374,21 @@ class ACDSlideAction extends StatefulWidget {
 
 class _ACDSlideActionState extends State<ACDSlideAction>
     with TickerProviderStateMixin {
-  late final AnimationController _animController;
+  /// The thumb offset in pixels from its resting position (unbounded:
+  /// positive towards the end for [ACDSlideActionDirection.startToEnd]/
+  /// `dual`, negative towards the start for `endToStart`). Drags write it
+  /// directly, programmatic moves animate it and releases spring it — only
+  /// the [AnimatedBuilder] subtree repaints, never this State's build.
+  late final AnimationController _extent;
   AnimationController? _shimmerController;
   ACDSlideActionController? _ownedController;
 
-  /// Current thumb offset in pixels from its resting position. Positive
-  /// towards the end for [ACDSlideActionDirection.startToEnd]/`dual`,
-  /// negative towards the start for `endToStart`.
-  double _dragExtent = 0.0;
+  /// The thumb offset, clamped to the track (a released spring may briefly
+  /// overshoot the controller value; the thumb never leaves the track).
+  double get _dragExtent {
+    final double v = _extent.value;
+    return v.clamp(-_trackExtent, _trackExtent);
+  }
 
   /// Max drag distance in pixels, recomputed each build from layout.
   double _trackExtent = 1.0;
@@ -383,10 +403,7 @@ class _ACDSlideActionState extends State<ACDSlideAction>
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
-      vsync: this,
-      duration: widget.animationDuration,
-    );
+    _extent = AnimationController.unbounded(vsync: this);
     _controller.addListener(_onControllerChanged);
     if (widget.shimmerOnLabel) {
       _shimmerController = AnimationController(
@@ -419,7 +436,7 @@ class _ACDSlideActionState extends State<ACDSlideAction>
   @override
   void dispose() {
     _controller.removeListener(_onControllerChanged);
-    _animController.dispose();
+    _extent.dispose();
     _shimmerController?.dispose();
     _ownedController?.dispose();
     super.dispose();
@@ -437,8 +454,10 @@ class _ACDSlideActionState extends State<ACDSlideAction>
         unawaited(_animateTo(_confirmedExtent(), widget.animationDuration));
       case ACDSlideActionStatus.success:
         unawaited(
-          _animateTo(_confirmedExtent(), widget.animationDuration).then((_) {
-            if (widget.hapticFeedbackOnSuccess) {
+          _animateTo(_confirmedExtent(), widget.animationDuration).then((
+            completed,
+          ) {
+            if (completed && widget.hapticFeedbackOnSuccess) {
               HapticFeedback.lightImpact();
             }
           }),
@@ -458,27 +477,53 @@ class _ACDSlideActionState extends State<ACDSlideAction>
     return _trackExtent;
   }
 
-  Future<void> _animateTo(double target, Duration duration) async {
-    if (!mounted) return;
-    final double begin = _dragExtent;
-    if (begin == target) return;
-    _animController
-      ..duration = duration
-      ..value = 0;
-    final Animation<double> anim = Tween<double>(begin: begin, end: target)
-        .animate(
-          CurvedAnimation(
-            parent: _animController,
-            curve: widget.animationCurve,
-          ),
-        );
-    void listener() {
-      if (mounted) setState(() => _dragExtent = anim.value);
+  /// Returns `true` when the motion ran to completion (or there was nothing
+  /// to animate), `false` when it was superseded/cancelled — so callers
+  /// never fire follow-up effects (e.g. [ACDSlideAction.onConfirm]) for an
+  /// interrupted animation. Instant under reduce motion.
+  Future<bool> _animateTo(double target, Duration duration) async {
+    if (!mounted) return false;
+    if (_extent.value == target) return true;
+    if (acdReduceMotion(context)) {
+      _extent.value = target;
+      return true;
     }
+    try {
+      await _extent
+          .animateTo(target, duration: duration, curve: widget.animationCurve)
+          .orCancel;
+      return mounted;
+    } on TickerCanceled {
+      // Superseded by a newer run, a drag, or dispose.
+      return false;
+    }
+  }
 
-    anim.addListener(listener);
-    await _animController.forward();
-    anim.removeListener(listener);
+  /// Springs the thumb to [target] carrying the release [velocity] (px/s).
+  /// Same completion contract as [_animateTo].
+  Future<bool> _springTo(double target, double velocity) async {
+    if (!mounted) return false;
+    if (acdReduceMotion(context)) {
+      _extent.value = target;
+      return true;
+    }
+    try {
+      await _extent
+          .animateWith(
+            SpringSimulation(
+              acdThumbSpring,
+              _extent.value,
+              target,
+              velocity,
+              tolerance: const Tolerance(distance: 0.5, velocity: 5),
+            ),
+          )
+          .orCancel;
+      _extent.value = target; // land exactly, whatever the tolerance
+      return mounted;
+    } on TickerCanceled {
+      return false;
+    }
   }
 
   bool get _interactive =>
@@ -488,7 +533,8 @@ class _ACDSlideActionState extends State<ACDSlideAction>
 
   void _onDragStart(DragStartDetails details) {
     if (!_interactive) return;
-    _animController.stop();
+    _extent.stop();
+    _extent.value = _dragExtent; // drop any spring overshoot
     setState(() => _dragging = true);
   }
 
@@ -496,19 +542,19 @@ class _ACDSlideActionState extends State<ACDSlideAction>
     if (!_interactive) return;
     double delta = details.delta.dx;
     if (_rtl) delta = -delta;
-    setState(() {
-      switch (widget.direction) {
-        case ACDSlideActionDirection.startToEnd:
-          _dragExtent = (_dragExtent + delta).clamp(0.0, _trackExtent);
-        case ACDSlideActionDirection.endToStart:
-          _dragExtent = (_dragExtent + delta).clamp(-_trackExtent, 0.0);
-        case ACDSlideActionDirection.dual:
-          _dragExtent = (_dragExtent + delta).clamp(
-            -_trackExtent,
-            _trackExtent,
-          );
-      }
-    });
+    final bool wasPast = _progress >= widget.dismissThreshold;
+    final double next = _extent.value + delta;
+    // No setState: the AnimatedBuilder repaints from the controller.
+    _extent.value = switch (widget.direction) {
+      ACDSlideActionDirection.startToEnd => next.clamp(0.0, _trackExtent),
+      ACDSlideActionDirection.endToStart => next.clamp(-_trackExtent, 0.0),
+      ACDSlideActionDirection.dual => next.clamp(-_trackExtent, _trackExtent),
+    };
+    // A tick when the release point would now confirm (and when it no
+    // longer would) — tells the user without looking.
+    if (wasPast != (_progress >= widget.dismissThreshold)) {
+      ACDHaptics.selection(context);
+    }
     widget.onSlideChanged?.call(
       _trackExtent == 0 ? 0 : _dragExtent / _trackExtent,
     );
@@ -517,31 +563,69 @@ class _ACDSlideActionState extends State<ACDSlideAction>
   Future<void> _onDragEnd(DragEndDetails details) async {
     setState(() => _dragging = false);
     if (!_interactive) return;
-    if (_progress >= widget.dismissThreshold) {
-      await _animateTo(
-        _dragExtent >= 0 ? _trackExtent : -_trackExtent,
-        widget.animationDuration,
+    double velocity = details.primaryVelocity ?? 0;
+    if (_rtl) velocity = -velocity;
+    final double sign = _dragExtent == 0
+        ? (widget.direction == ACDSlideActionDirection.endToStart ? -1 : 1)
+        : _dragExtent.sign;
+    // Velocity towards the confirm end, in tracks per second.
+    final double towards = _trackExtent == 0
+        ? 0
+        : velocity * sign / _trackExtent;
+    // Confirm past the threshold, or on a decisive flick from > 30 %.
+    final bool confirm =
+        _progress >= widget.dismissThreshold ||
+        (towards > 2.0 && _progress > 0.3);
+    if (confirm) {
+      final bool completed = await _springTo(
+        sign * _trackExtent,
+        // Carry a flick that points the right way; ignore a reversed one.
+        velocity * sign > 0 ? velocity : 0,
       );
-      widget.onConfirm();
-    } else {
+      if (completed) widget.onConfirm();
+    } else if (velocity == 0) {
       await _animateTo(0, widget.snapBackDuration);
+    } else {
+      await _springTo(0, velocity);
+    }
+  }
+
+  Future<void> _confirmWithoutDrag() async {
+    if (!_interactive || _trackExtent == 0) return;
+    final bool completed = await _animateTo(
+      _confirmedExtent(),
+      widget.animationDuration,
+    );
+    if (completed) widget.onConfirm();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The label shimmer loops forever — exactly what reduce motion opts out
+    // of.
+    final AnimationController? shimmer = _shimmerController;
+    if (shimmer == null) return;
+    if (acdReduceMotion(context)) {
+      shimmer.stop();
+    } else if (!shimmer.isAnimating) {
+      shimmer.repeat();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final ACDSlideActionStatus status = _controller.status;
+    final ACDResolvedDesign design = ACDDesign.resolve(context, widget.design);
+    final ACDDesignTokens tokens = ACDDesignTokens.of(context, design);
     final BorderRadius radius =
         widget.borderRadius ?? BorderRadius.circular(widget.height / 2);
     final Color baseTrackColor = _dragging
-        ? (widget.activeTrackColor ??
-              widget.trackColor ??
-              Theme.of(context).colorScheme.primary)
-        : (widget.inactiveTrackColor ??
-              widget.trackColor ??
-              Theme.of(context).colorScheme.primary);
+        ? (widget.activeTrackColor ?? widget.trackColor ?? tokens.primary)
+        : (widget.inactiveTrackColor ?? widget.trackColor ?? tokens.primary);
     final Color effectiveTrackColor = status == ACDSlideActionStatus.success
-        ? (widget.successColor ?? Colors.green)
+        ? (widget.successColor ??
+              (design.isCupertino ? tokens.success : Colors.green))
         : baseTrackColor;
     final Gradient? baseTrackGradient = _dragging
         ? (widget.activeTrackGradient ?? widget.trackGradient)
@@ -558,94 +642,128 @@ class _ACDSlideActionState extends State<ACDSlideAction>
             widget.thumbSize ?? insetHeight - widget.thumbPadding * 2;
         _trackExtent = (insetWidth - thumbSize - 8).clamp(1.0, double.infinity);
 
-        Widget track =
-            widget.outerBackgroundBuilder?.call(context, _dragExtent, status) ??
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: baseTrackGradient == null ? effectiveTrackColor : null,
-                gradient: status == ACDSlideActionStatus.success
-                    ? null
-                    : baseTrackGradient,
+        // Only this subtree follows the thumb frame-by-frame.
+        final Widget content = AnimatedBuilder(
+          animation: _extent,
+          builder: (context, _) {
+            Widget track =
+                widget.outerBackgroundBuilder?.call(
+                  context,
+                  _dragExtent,
+                  status,
+                ) ??
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: baseTrackGradient == null
+                        ? effectiveTrackColor
+                        : null,
+                    gradient: status == ACDSlideActionStatus.success
+                        ? null
+                        : baseTrackGradient,
+                    borderRadius: radius,
+                    boxShadow:
+                        widget.boxShadow ??
+                        (() {
+                          final double trackElevation =
+                              widget.elevationTrack ?? widget.elevation;
+                          return trackElevation > 0
+                              ? [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.2),
+                                    blurRadius: trackElevation * 2,
+                                    offset: Offset(0, trackElevation / 2),
+                                  ),
+                                ]
+                              : null;
+                        })(),
+                  ),
+                );
+
+            if (widget.blurTrack) {
+              track = ClipRRect(
                 borderRadius: radius,
-                boxShadow:
-                    widget.boxShadow ??
-                    (() {
-                      final double trackElevation =
-                          widget.elevationTrack ?? widget.elevation;
-                      return trackElevation > 0
-                          ? [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.2),
-                                blurRadius: trackElevation * 2,
-                                offset: Offset(0, trackElevation / 2),
-                              ),
-                            ]
-                          : null;
-                    })(),
-              ),
-            );
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: track,
+                ),
+              );
+            }
 
-        if (widget.blurTrack) {
-          track = ClipRRect(
-            borderRadius: radius,
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: track,
-            ),
-          );
-        }
-
-        final Widget content = Stack(
-          alignment: Alignment.center,
-          children: [
-            Positioned.fill(child: track),
-            if (widget.showWaveTrail)
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: _ACDWaveTrailPainter(
-                    dragExtent: _dragExtent,
-                    trackExtent: _trackExtent,
-                    thumbSize: thumbSize,
-                    rtl: _rtl,
-                    direction: widget.direction,
-                    color:
-                        widget.waveColor ?? Colors.white.withValues(alpha: 0.4),
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                Positioned.fill(child: track),
+                if (widget.showWaveTrail)
+                  Positioned.fill(
+                    child: CustomPaint(
+                      painter: _ACDWaveTrailPainter(
+                        dragExtent: _dragExtent,
+                        trackExtent: _trackExtent,
+                        thumbSize: thumbSize,
+                        rtl: _rtl,
+                        direction: widget.direction,
+                        color:
+                            widget.waveColor ??
+                            Colors.white.withValues(alpha: 0.4),
+                      ),
+                    ),
+                  ),
+                Positioned.fill(
+                  child: Center(
+                    child:
+                        widget.backgroundBuilder?.call(
+                          context,
+                          _dragExtent,
+                          status,
+                        ) ??
+                        _buildLabel(context),
                   ),
                 ),
-              ),
-            Positioned.fill(
-              child: Center(
-                child:
-                    widget.backgroundBuilder?.call(
-                      context,
-                      _dragExtent,
-                      status,
-                    ) ??
-                    _buildLabel(context),
-              ),
-            ),
-            _buildThumb(
-              context,
-              status,
-              thumbSize,
-              radius,
-              insetWidth,
-              insetHeight,
-            ),
-          ],
+                _buildThumb(
+                  context,
+                  status,
+                  thumbSize,
+                  radius,
+                  insetWidth,
+                  insetHeight,
+                ),
+              ],
+            );
+          },
         );
 
-        return Opacity(
-          opacity: widget.enabled ? 1.0 : 0.5,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onHorizontalDragStart: _onDragStart,
-            onHorizontalDragUpdate: _onDragUpdate,
-            onHorizontalDragEnd: (d) => unawaited(_onDragEnd(d)),
-            child: SizedBox(
-              height: widget.height,
-              width: totalWidth,
-              child: Padding(padding: widget.trackPadding, child: content),
+        // Screen-reader / keyboard users can't drag: expose a button whose
+        // activation plays the confirm slide and then fires onConfirm.
+        return Semantics(
+          button: true,
+          enabled: _interactive,
+          label: widget.label,
+          // The visible label text would otherwise be announced twice.
+          excludeSemantics: widget.label != null,
+          onTap: _interactive ? _confirmWithoutDrag : null,
+          child: FocusableActionDetector(
+            enabled: _interactive,
+            actions: <Type, Action<Intent>>{
+              ActivateIntent: CallbackAction<ActivateIntent>(
+                onInvoke: (_) {
+                  _confirmWithoutDrag();
+                  return null;
+                },
+              ),
+            },
+            child: Opacity(
+              opacity: widget.enabled ? 1.0 : 0.5,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onHorizontalDragStart: _onDragStart,
+                onHorizontalDragUpdate: _onDragUpdate,
+                onHorizontalDragEnd: (d) => unawaited(_onDragEnd(d)),
+                child: SizedBox(
+                  height: widget.height,
+                  width: totalWidth,
+                  child: Padding(padding: widget.trackPadding, child: content),
+                ),
+              ),
             ),
           ),
         );
@@ -661,6 +779,11 @@ class _ACDSlideActionState extends State<ACDSlideAction>
         const TextStyle(color: Colors.white, fontWeight: FontWeight.w600);
     final Text text = Text(widget.label!, style: style);
     if (!widget.shimmerOnLabel || _shimmerController == null) return text;
+    // The shimmer repaints every frame: keep it off the track's layer.
+    return RepaintBoundary(child: _shimmer(style, text));
+  }
+
+  Widget _shimmer(TextStyle style, Text text) {
     return AnimatedBuilder(
       animation: _shimmerController!,
       builder: (context, child) {
@@ -756,7 +879,10 @@ class _ACDSlideActionState extends State<ACDSlideAction>
             SizedBox(
               width: thumbSize * 0.5,
               height: thumbSize * 0.5,
-              child: const CircularProgressIndicator(strokeWidth: 2),
+              child: ACDAdaptiveProgress(
+                design: ACDDesign.resolve(context, widget.design),
+                strokeWidth: 2,
+              ),
             );
       case ACDSlideActionStatus.success:
         icon = Icon(

@@ -1,6 +1,6 @@
 import 'package:awesome_custom_dialog/src/core/acd_animation.dart';
 import 'package:awesome_custom_dialog/src/toast/acd_toast_transition.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // Regression coverage for the pre-existing bug where ACDAnimation.slideLeft/

@@ -1,5 +1,5 @@
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../widgets/showcase_widgets.dart';
 
@@ -55,7 +55,10 @@ ACDPinField(
 )''',
         ),
         const SizedBox(height: 24),
-        sectionHeader('Form validation — fully styled per state'),
+        sectionHeader(
+          'Form validation — fully styled per state',
+          description: 'A wrong entry shakes (not under reduce motion)',
+        ),
         Form(
           key: _formKey,
           child: Column(
@@ -89,6 +92,8 @@ ACDPinField(
   validator: (v) => v != null && v.length == 4 ? null : 'Enter all 4 digits',
   submittedPinTheme: ACDPinTheme(borderColor: Colors.green, borderWidth: 2),
   errorPinTheme: ACDPinTheme(borderColor: scheme.error, borderWidth: 2),
+  // errorAnimation: ACDPinErrorAnimation.shake (default) / .none
+  // clearOnError: true, // wipe the digits when an error appears
 )''',
         ),
         const SizedBox(height: 24),

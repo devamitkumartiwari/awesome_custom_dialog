@@ -1,7 +1,7 @@
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
-import 'main.dart';
+import 'app_settings.dart';
 import 'screens/autocomplete/autocomplete_hub_screen.dart';
 import 'screens/buttons/buttons_hub_screen.dart';
 import 'screens/customization/customization_hub_screen.dart';
@@ -23,6 +23,7 @@ import 'screens/toast/toast_screen.dart';
 import 'screens/animations_screen.dart';
 import 'theme/app_theme.dart';
 import 'widgets/showcase_widgets.dart';
+import 'widgets/design_switcher.dart';
 
 class _Category {
   const _Category({
@@ -281,6 +282,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   onPressed: _cycleTheme,
                 ),
               ),
+              const DesignSwitcherButton(),
               IconButton(
                 icon: const Icon(Icons.info_outline),
                 onPressed: () => _showAbout(context),
@@ -334,6 +336,32 @@ class _HomeScreenState extends State<HomeScreen> {
                         label: Text('18+ features'),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.md,
+                        0,
+                        AppSpacing.md,
+                        AppSpacing.xs,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const DesignSettingsPanel(compact: true),
+                          Align(
+                            alignment: AlignmentDirectional.centerEnd,
+                            child: TextButton.icon(
+                              icon: const Icon(Icons.tune, size: 18),
+                              label: const Text('Platform, theme & motion'),
+                              onPressed: () => showDesignSettings(context),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   CategoryCard(
@@ -444,11 +472,12 @@ class _GroupScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(title),
         backgroundColor: color.withValues(alpha: 0.08),
+        actions: const [DesignSwitcherButton()],
       ),
       body: ListView.separated(
         padding: const EdgeInsets.all(AppSpacing.lg),
         itemCount: categories.length,
-        separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+        separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
         itemBuilder: (context, index) {
           final _Category category = categories[index];
           return CategoryCard(

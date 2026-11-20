@@ -1,13 +1,13 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart' show SchedulerBinding;
+import 'package:material_ui/material_ui.dart';
 
-import 'acd_motion.dart';
+import 'acd_motion_effect.dart';
+import 'acd_stagger_host.dart';
 import 'acd_stagger_options.dart';
 
 /// A dependency-free, staggered-entrance/exit `GridView` — see
 /// [ACDStaggeredList] for the list equivalent and full behavior notes
-/// (visibility toggling, exit ordering, completion callbacks). Each cell is
-/// wrapped in an [ACDMotion] whose `delay` increases with its index.
+/// (visibility toggling, exit ordering, completion callbacks). Cells play
+/// [ACDMotionEffect]s off one shared clock, each starting later by index.
 ///
 /// ```dart
 /// ACDStaggeredGrid(
@@ -85,71 +85,26 @@ class ACDStaggeredGrid extends StatefulWidget {
   State<ACDStaggeredGrid> createState() => _ACDStaggeredGridState();
 }
 
-class _ACDStaggeredGridState extends State<ACDStaggeredGrid> {
-  int _entranceDone = 0;
-  int _exitDone = 0;
+class _ACDStaggeredGridState extends State<ACDStaggeredGrid>
+    with SingleTickerProviderStateMixin, ACDStaggerHost<ACDStaggeredGrid> {
+  // One shared clock for every item — see ACDStaggerHost.
+  @override
+  int get staggerItemCount => widget.itemCount;
 
   @override
-  void initState() {
-    super.initState();
-    _maybeFireEmptyCompletion();
-  }
+  bool get staggerVisible => widget.visible;
 
   @override
-  void didUpdateWidget(covariant ACDStaggeredGrid oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.visible != oldWidget.visible) {
-      _entranceDone = 0;
-      _exitDone = 0;
-      _maybeFireEmptyCompletion();
-    }
-  }
+  ACDStaggerOptions get staggerOptions => widget.options;
 
-  // See ACDStaggeredList._maybeFireEmptyCompletion — same reasoning.
-  void _maybeFireEmptyCompletion() {
-    if (widget.itemCount != 0) return;
-    SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      if (widget.visible) {
-        widget.onAllEntranceComplete?.call();
-      } else {
-        widget.onAllExitComplete?.call();
-      }
-    });
-  }
+  @override
+  VoidCallback? get staggerOnEntranceComplete => widget.onAllEntranceComplete;
 
-  void _handleEntranceComplete() {
-    _entranceDone++;
-    if (_entranceDone == widget.itemCount) {
-      widget.onAllEntranceComplete?.call();
-    }
-  }
+  @override
+  VoidCallback? get staggerOnExitComplete => widget.onAllExitComplete;
 
-  void _handleExitComplete() {
-    _exitDone++;
-    if (_exitDone == widget.itemCount) {
-      widget.onAllExitComplete?.call();
-    }
-  }
-
-  Widget _wrappedBuilder(BuildContext context, int index) {
-    return ACDMotion(
-      key: ValueKey<int>(index),
-      visible: widget.visible,
-      delay: widget.options.delayForIndex(
-        index,
-        widget.itemCount,
-        visible: widget.visible,
-      ),
-      duration: widget.options.itemDuration,
-      curve: widget.options.curve,
-      effect: widget.options.effect,
-      exitEffect: widget.options.exitEffect,
-      onEntranceComplete: _handleEntranceComplete,
-      onExitComplete: _handleExitComplete,
-      child: widget.itemBuilder(context, index),
-    );
-  }
+  Widget _wrappedBuilder(BuildContext context, int index) =>
+      wrapStaggerItem(index, widget.itemBuilder(context, index));
 
   @override
   Widget build(BuildContext context) {

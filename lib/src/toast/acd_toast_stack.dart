@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../core/acd_animation.dart';
 import '../core/acd_gravity.dart';
 import 'acd_toast_card.dart';
 import 'acd_toast_config.dart';
 import 'acd_toast_controller.dart';
+import 'acd_toast_dismiss_reason.dart';
 import 'acd_toast_lifecycle.dart';
 import 'acd_toast_overflow_policy.dart';
 import 'acd_toast_transition.dart';
@@ -102,7 +103,7 @@ class _ACDToastStackState extends State<ACDToastStack>
         if (!canInsert && policy == ACDToastOverflowPolicy.dropOldest) {
           for (final ACDToastController other in all) {
             if (other.state is! ACDToastQueued && !other.isDismissing) {
-              other.requestDismiss();
+              other.requestDismiss(reason: ACDToastDismissReason.replaced);
               break;
             }
           }
@@ -166,23 +167,31 @@ class _ACDToastStackState extends State<ACDToastStack>
     for (int i = 0; i < visible.length; i++) {
       if (i > 0) children.add(SizedBox(height: spacing));
       final ACDToastController c = visible[i];
-      final ACDAnimation? exitAnim =
-          c.config.exitAnimation ?? c.config.animation;
+      // Entrance and exit share one controller (forward = in, reverse =
+      // out), so pick the transition by phase. Previously the exit settings
+      // were always preferred, so setting an exit animation silently
+      // replaced the entrance too. requestDismiss() flips the state (and
+      // notifies this stack) before reversing, so the exit applies in time.
+      final ACDAnimation? anim = c.isDismissing
+          ? (c.config.exitAnimation ?? c.config.animation)
+          : c.config.animation;
+      final Function(Widget, Animation<double>)? customFn = c.isDismissing
+          ? (c.config.exitAnimatedFunc ?? c.config.animatedFunc)
+          : c.config.animatedFunc;
       children.add(
         ACDToastTransition(
           key: ValueKey(c.id),
           controller: c.animationController!,
           animatedFunc:
-              c.config.exitAnimatedFunc ??
-              c.config.animatedFunc ??
-              (exitAnim != null
-                  ? acdToastPresetAnimFn(exitAnim, direction)
-                  : null),
+              customFn ??
+              (anim != null ? acdToastPresetAnimFn(anim, direction) : null),
           child: ACDToastCard(
             controller: c,
             config: c.config,
-            onDismissRequested: ({bool immediate = false}) =>
-                c.requestDismiss(immediate: immediate),
+            onDismissRequested: ({
+              bool immediate = false,
+              ACDToastDismissReason reason = ACDToastDismissReason.programmatic,
+            }) => c.requestDismiss(immediate: immediate, reason: reason),
           ),
         ),
       );

@@ -1,5 +1,5 @@
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../widgets/showcase_widgets.dart';
 
@@ -97,6 +97,46 @@ ACDTriggerAutocompleteField(
     ACDAutocompleteTrigger(trigger: '@', optionsBuilder: findMentions),
   ],
   onOptionSelected: (trigger, option) => print('\$option selected'),
+)''',
+        ),
+        const SizedBox(height: 32),
+        sectionHeader(
+          'Caret-anchored popup + multi-character trigger',
+          description:
+              'The popup follows the @ / :: you type; arrows + Enter pick',
+        ),
+        ACDTriggerAutocompleteField(
+          maxLines: 3,
+          popupAnchor: ACDPopupAnchor.caret,
+          popupWidthFactor: 0.6,
+          decoration: const InputDecoration(
+            labelText: 'Message',
+            hintText: 'Hi @al… or ::sm',
+            border: OutlineInputBorder(),
+          ),
+          triggers: [
+            ACDAutocompleteTrigger(trigger: '@', optionsBuilder: _findMentions),
+            ACDAutocompleteTrigger(
+              trigger: '::',
+              optionsBuilder: (q) async => const [
+                'smile',
+                'sad',
+                'sunglasses',
+              ].where((e) => e.startsWith(q)).toList(),
+            ),
+          ],
+          onOptionSelected: (trigger, option) =>
+              debugPrint('${trigger.trigger}$option selected'),
+        ),
+        const CodeSnippet(
+          code: '''
+ACDTriggerAutocompleteField(
+  popupAnchor: ACDPopupAnchor.caret,
+  popupWidthFactor: 0.6,
+  triggers: [
+    ACDAutocompleteTrigger(trigger: '@', optionsBuilder: findMentions),
+    ACDAutocompleteTrigger(trigger: '::', optionsBuilder: findEmoji),
+  ],
 )''',
         ),
       ],
