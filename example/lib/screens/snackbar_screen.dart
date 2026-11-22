@@ -1,5 +1,5 @@
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../widgets/showcase_widgets.dart';
 
@@ -30,7 +30,7 @@ class SnackbarScreen extends StatelessWidget {
           actionCard(
             'Warning',
             Icons.priority_high_rounded,
-            const Color(0xFFFCA652),
+            ACDContentType.warning.color,
             () => _showSnackbar(context, ACDContentType.warning),
           ),
           actionCard(

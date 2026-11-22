@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'acd_dialog.dart';
 import '../list_tile/acd_searchable_list_tile.dart';
@@ -29,7 +29,7 @@ extension ACDDialogSearchableList on ACDDialog {
     Widget Function(BuildContext context, Object error)? errorBuilder,
     double? height,
     EdgeInsets? padding,
-    Color tileColor = Colors.white,
+    Color? tileColor,
     Color? color,
     double? fontSize,
     FontWeight? fontWeight,
@@ -46,11 +46,14 @@ extension ACDDialogSearchableList on ACDDialog {
     bool Function(T a, T b)? compareFn,
     bool Function(T item)? isDisabledItem,
     List<T>? favoriteItems,
+    String Function(T item)? groupBy,
+    bool cacheResults = false,
+    Future<T?> Function(String query)? onCreate,
     Future<List<T>> Function(String keyword, int page)? onFindPaged,
     Widget Function(BuildContext context)? loadMoreBuilder,
   }) {
     if (context == null) return this;
-    final size = MediaQuery.of(context!).size;
+    final size = MediaQuery.sizeOf(context!);
     return widget(
       Container(
         height: height,
@@ -93,8 +96,12 @@ extension ACDDialogSearchableList on ACDDialog {
           compareFn: compareFn,
           isDisabledItem: isDisabledItem,
           favoriteItems: favoriteItems,
+          groupBy: groupBy,
+          cacheResults: cacheResults,
+          onCreate: onCreate,
           onFindPaged: onFindPaged,
           loadMoreBuilder: loadMoreBuilder,
+          design: design,
         ),
       ),
     );
@@ -120,8 +127,8 @@ extension ACDDialogSearchableList on ACDDialog {
     List<T>? initialValues,
     void Function(List<T> items)? onMultipleItemsChange,
     bool showConfirmCancelButtons = true,
-    String confirmText = 'OK',
-    String cancelText = 'Cancel',
+    String? confirmText,
+    String? cancelText,
     Color? confirmColor,
     Color? cancelColor,
     FontWeight? confirmFontWeight,
@@ -133,7 +140,7 @@ extension ACDDialogSearchableList on ACDDialog {
     Widget Function(BuildContext context, Object error)? errorBuilder,
     double? height,
     EdgeInsets? padding,
-    Color tileColor = Colors.white,
+    Color? tileColor,
     Color? color,
     double? fontSize,
     FontWeight? fontWeight,
@@ -150,11 +157,16 @@ extension ACDDialogSearchableList on ACDDialog {
     bool Function(T a, T b)? compareFn,
     bool Function(T item)? isDisabledItem,
     List<T>? favoriteItems,
+    String Function(T item)? groupBy,
+    bool cacheResults = false,
+    Future<T?> Function(String query)? onCreate,
+    int? maxSelection,
+    bool showSelectAll = false,
     Future<List<T>> Function(String keyword, int page)? onFindPaged,
     Widget Function(BuildContext context)? loadMoreBuilder,
   }) {
     if (context == null) return this;
-    final size = MediaQuery.of(context!).size;
+    final size = MediaQuery.sizeOf(context!);
     return widget(
       Container(
         height: height,
@@ -203,8 +215,14 @@ extension ACDDialogSearchableList on ACDDialog {
           compareFn: compareFn,
           isDisabledItem: isDisabledItem,
           favoriteItems: favoriteItems,
+          groupBy: groupBy,
+          cacheResults: cacheResults,
+          onCreate: onCreate,
+          maxSelection: maxSelection,
+          showSelectAll: showSelectAll,
           onFindPaged: onFindPaged,
           loadMoreBuilder: loadMoreBuilder,
+          design: design,
         ),
       ),
     );

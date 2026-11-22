@@ -1,5 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../design/acd_design.dart';
+import '../design/acd_design_tokens.dart';
+import '../design/internal/acd_adaptive_widgets.dart';
+import '../design/internal/acd_platform_support.dart';
 import '../motion/acd_motion.dart';
 import '../motion/acd_stagger_options.dart';
 
@@ -74,7 +78,12 @@ class ACDRadioListTile extends StatefulWidget {
     this.onChanged,
     this.borderRadius,
     this.stagger,
+    this.design,
   });
+
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign]. iOS
+  /// marks the selection with a trailing checkmark (no radio buttons).
+  final ACDDesign? design;
 
   /// The selectable options.
   final List<ACDRadioItem>? items;
@@ -117,8 +126,19 @@ class _ACDRadioListTileState extends State<ACDRadioListTile> {
     _selected = widget.initialValue ?? -1;
   }
 
+  void _select(int value) {
+    setState(() => _selected = value);
+    widget.onChanged?.call(value);
+    widget.items?[value].onTap?.call(value);
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Resolved once per list, never per row.
+    final ACDResolvedDesign design = ACDDesign.resolve(context, widget.design);
+    final Color? cupertinoText = design.isCupertino
+        ? ACDDesignTokens.of(context, design).onSurface
+        : null;
     // RadioListTile.groupValue/onChanged are deprecated in favor of an
     // ancestor RadioGroup — it supplies the group value/change handler to
     // every RadioListTile in the subtree instead of each tile taking them
@@ -127,9 +147,7 @@ class _ACDRadioListTileState extends State<ACDRadioListTile> {
       groupValue: _selected,
       onChanged: (int? value) {
         if (value == null) return;
-        setState(() => _selected = value);
-        widget.onChanged?.call(value);
-        widget.items?[value].onTap?.call(value);
+        _select(value);
       },
       child: ListView.builder(
         padding: EdgeInsets.zero,
@@ -139,36 +157,70 @@ class _ACDRadioListTileState extends State<ACDRadioListTile> {
         itemCount: widget.items?.length ?? 0,
         itemBuilder: (BuildContext context, int index) {
           final item = widget.items![index];
-          final Widget tile = Material(
-            color: widget.color,
-            child: RadioListTile<int>(
-              title: Text(
-                item.text ?? '',
-                style: TextStyle(
-                  fontSize: item.fontSize ?? 14,
-                  fontWeight: item.fontWeight ?? FontWeight.normal,
-                  fontFamily: item.fontFamily,
-                  color: item.color ?? Colors.black,
-                ).merge(item.style),
-              ),
-              value: index,
-              activeColor: widget.activeColor,
-              // BUG: defaulting to EdgeInsets.zero left icons/text flush
-              // against the dialog edge with no breathing room — match
-              // Flutter's own ListTile default instead.
-              contentPadding:
-                  item.padding ?? const EdgeInsets.symmetric(horizontal: 16.0),
-              // RadioListTile has one extra slot (`secondary`), not
-              // independent leading/trailing — see ACDRadioItem's dartdoc.
-              secondary: item.trailing ?? item.leading,
-              controlAffinity: item.trailing != null
-                  ? ListTileControlAffinity.leading
-                  : ListTileControlAffinity.platform,
-              shape: widget.borderRadius == null
-                  ? null
-                  : RoundedRectangleBorder(borderRadius: widget.borderRadius!),
-            ),
-          );
+          final Widget tile = design.isCupertino
+              ? ACDAdaptiveListTile(
+                  design: design,
+                  selected: index == _selected,
+                  backgroundColor: widget.color,
+                  contentPadding: item.padding,
+                  leading: item.leading,
+                  onTap: () {
+                    ACDHaptics.selection(context);
+                    _select(index);
+                  },
+                  trailing: index == _selected
+                      ? Icon(
+                          ACDIcon.check.of(design),
+                          size: 20,
+                          color: widget.activeColor,
+                        )
+                      : item.trailing,
+                  title: Text(
+                    item.text ?? '',
+                    style: TextStyle(
+                      fontSize: item.fontSize,
+                      fontWeight: item.fontWeight,
+                      fontFamily: item.fontFamily,
+                      color: item.color ?? cupertinoText,
+                    ).merge(item.style),
+                  ),
+                )
+              : acdEnsureMaterial(
+                  context,
+                  Material(
+                    color: widget.color,
+                    child: RadioListTile<int>(
+                      title: Text(
+                        item.text ?? '',
+                        style: TextStyle(
+                          fontSize: item.fontSize ?? 14,
+                          fontWeight: item.fontWeight ?? FontWeight.normal,
+                          fontFamily: item.fontFamily,
+                          color: item.color ?? acdMaterialOnSurface(context),
+                        ).merge(item.style),
+                      ),
+                      value: index,
+                      activeColor: widget.activeColor,
+                      // BUG: defaulting to EdgeInsets.zero left icons/text flush
+                      // against the dialog edge with no breathing room — match
+                      // Flutter's own ListTile default instead.
+                      contentPadding:
+                          item.padding ??
+                          const EdgeInsets.symmetric(horizontal: 16.0),
+                      // RadioListTile has one extra slot (`secondary`), not
+                      // independent leading/trailing — see ACDRadioItem's dartdoc.
+                      secondary: item.trailing ?? item.leading,
+                      controlAffinity: item.trailing != null
+                          ? ListTileControlAffinity.leading
+                          : ListTileControlAffinity.platform,
+                      shape: widget.borderRadius == null
+                          ? null
+                          : RoundedRectangleBorder(
+                              borderRadius: widget.borderRadius!,
+                            ),
+                    ),
+                  ),
+                );
           final ACDStaggerOptions? stagger = widget.stagger;
           if (stagger == null) return tile;
           return ACDMotion(

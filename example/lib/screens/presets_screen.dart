@@ -1,5 +1,5 @@
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../widgets/showcase_widgets.dart';
 
@@ -50,8 +50,41 @@ ACDDialog().build(context)
   )
   ..show();''',
         ),
+
+        const SizedBox(height: 24),
+        sectionHeader('Loading while you wait'),
+        buildList([
+          listItem(
+            'Loading dialog',
+            'Shows while the work runs, Cancel stops waiting',
+            Icons.hourglass_top_rounded,
+            () => _loading(context),
+          ),
+        ]),
+        const CodeSnippet(
+          code: '''
+final user = await ACDDialog.loading(
+  context: context,
+  future: api.signIn(email, password),
+  message: 'Signing in…',
+  cancelable: true,
+);''',
+        ),
       ],
     );
+  }
+
+  Future<void> _loading(BuildContext context) async {
+    try {
+      await ACDDialog.loading(
+        context: context,
+        future: Future<void>.delayed(const Duration(seconds: 2)),
+        message: 'Signing in…',
+        cancelable: true,
+      );
+    } on ACDLoadingCanceled {
+      // The user stopped waiting.
+    }
   }
 
   void _showSuccess(BuildContext ctx) {

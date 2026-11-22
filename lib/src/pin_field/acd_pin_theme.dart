@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Visual style for one [ACDPinField] cell. Supply a different [ACDPinTheme]
 /// per state ([ACDPinField.focusedPinTheme], [ACDPinField.submittedPinTheme],

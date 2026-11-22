@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'acd_dash_path.dart';
 
@@ -24,7 +24,9 @@ class ACDDashedLine extends StatelessWidget {
     this.gradient,
     this.roundedCaps = false,
     this.useRepaintBoundary = true,
-  });
+  }) : assert(dashLength > 0, 'dashLength must be positive'),
+       assert(gapLength >= 0, 'gapLength must not be negative'),
+       assert(thickness >= 0, 'thickness must not be negative');
 
   /// Whether the line runs horizontally or vertically.
   final Axis axis;
@@ -99,10 +101,15 @@ class _ACDDashedLinePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Offset start = Offset.zero;
+    // Stroke along the box's centre line: a stroke is centred on its path,
+    // so drawing at y=0 / x=0 put half the thickness outside this widget's
+    // own bounds (overlapping whatever sits above/before it).
+    final Offset start = axis == Axis.horizontal
+        ? Offset(0, size.height / 2)
+        : Offset(size.width / 2, 0);
     final Offset end = axis == Axis.horizontal
-        ? Offset(size.width, 0)
-        : Offset(0, size.height);
+        ? Offset(size.width, size.height / 2)
+        : Offset(size.width / 2, size.height);
 
     final Path straight = Path()
       ..moveTo(start.dx, start.dy)

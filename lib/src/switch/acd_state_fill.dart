@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Resolves the effective fill for a widget surface with active/inactive/
 /// disabled color and gradient variants layered over a shared base

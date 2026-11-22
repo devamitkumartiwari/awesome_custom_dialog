@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Returns [color] with its alpha channel replaced by [alpha] (`0.0`-`1.0`).
 ///

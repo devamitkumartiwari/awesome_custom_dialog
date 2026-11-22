@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 // FEAT-15/FEAT-16: drives the entrance animation for overlay-mode
 // presentation without a route-provided AnimationController (none exists
@@ -27,7 +27,8 @@ class ACDOverlayTransition extends StatelessWidget {
       tween: Tween(begin: 0.0, end: 1.0),
       duration: duration,
       builder: (context, value, childWidget) =>
-          animatedFunc!(childWidget!, AlwaysStoppedAnimation<double>(value)),
+          animatedFunc!(childWidget!, AlwaysStoppedAnimation<double>(value))
+              as Widget,
       child: child,
     );
   }

@@ -1,7 +1,10 @@
 import 'dart:ui' show lerpDouble;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../design/acd_design.dart';
+import '../design/internal/acd_platform_support.dart';
+import 'acd_loader_design.dart';
 import 'acd_loader_paint.dart';
 import 'acd_loader_segment.dart';
 import 'acd_loader_stroke_cap.dart';
@@ -46,7 +49,8 @@ class ACDMultiSegmentLinearIndicator extends StatefulWidget {
     this.animationDuration = const Duration(milliseconds: 500),
     this.animationCurve = Curves.linear,
     this.onAnimationEnd,
-  });
+    this.design,
+  }) : assert(stripeWidth > 0, 'stripeWidth must be positive');
 
   /// The segments to render, left to right.
   final List<ACDLoaderSegment> segments;
@@ -119,6 +123,10 @@ class ACDMultiSegmentLinearIndicator extends StatefulWidget {
   /// Fires once every segment's fill animation finishes.
   final VoidCallback? onAnimationEnd;
 
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign]. Picks the
+  /// default track (dark-mode aware) and, for Cupertino, the default fill.
+  final ACDDesign? design;
+
   @override
   State<ACDMultiSegmentLinearIndicator> createState() =>
       _ACDMultiSegmentLinearIndicatorState();
@@ -167,7 +175,9 @@ class _ACDMultiSegmentLinearIndicatorState
     _displayed.removeWhere((key, _) => !currentKeys.contains(key));
 
     if (widget.animate && widget.animationDuration != Duration.zero) {
-      _animateTo(widget.segments);
+      // Only restart when a target actually moved: an unrelated parent
+      // rebuild must not replay the fill (and re-fire onAnimationEnd).
+      if (_targetsChanged()) _animateTo(widget.segments);
     } else {
       for (int i = 0; i < widget.segments.length; i++) {
         _displayed[_keyFor(i, widget.segments[i])] = widget.segments[i].percent
@@ -192,7 +202,12 @@ class _ACDMultiSegmentLinearIndicatorState
       _stripeController = AnimationController(
         vsync: this,
         duration: const Duration(seconds: 1),
-      )..repeat();
+      );
+      // Reduce motion is readable from didChangeDependencies on; before
+      // that (initState) didChangeDependencies starts it right after.
+      if (_dependenciesReady && !acdReduceMotion(context)) {
+        _stripeController!.repeat();
+      }
     } else if (!_anySegmentStripes && _stripeController != null) {
       _stripeController!.dispose();
       _stripeController = null;
@@ -211,6 +226,26 @@ class _ACDMultiSegmentLinearIndicatorState
       final double end = _animEnd[key]!;
       _displayed[key] = lerpDouble(begin, end, t) ?? end;
     }
+  }
+
+  /// Whether any segment's target differs from the one being (or last)
+  /// animated to, including segments added or removed.
+  bool _targetsChanged() {
+    final Map<Object, double> targets = {
+      for (int i = 0; i < widget.segments.length; i++)
+        _keyFor(i, widget.segments[i]): widget.segments[i].percent.clamp(
+          0.0,
+          1.0,
+        ),
+    };
+    final Map<Object, double> previous = _animEnd.isNotEmpty
+        ? _animEnd
+        : _displayed;
+    if (targets.length != previous.length) return true;
+    for (final MapEntry<Object, double> e in targets.entries) {
+      if (previous[e.key] != e.value) return true;
+    }
+    return false;
   }
 
   void _animateTo(List<ACDLoaderSegment> segments) {
@@ -258,12 +293,12 @@ class _ACDMultiSegmentLinearIndicatorState
               _keyFor(i, segment),
               segment.percent.clamp(0.0, 1.0),
             ),
-            color: segment.color,
+            color: segment.color ?? (_cupertino ? _defaults.progress : null),
             gradient: segment.gradient,
             backgroundColor:
                 segment.backgroundColor ??
                 widget.backgroundColor ??
-                const Color(0xFFB8C7CB),
+                _defaults.track,
             backgroundGradient:
                 segment.backgroundGradient ?? widget.backgroundGradient,
             borderColor: segment.borderColor ?? widget.borderColor,
@@ -280,15 +315,37 @@ class _ACDMultiSegmentLinearIndicatorState
     );
   }
 
+  // Default colors, resolved once per build (not per segment/frame).
+  ({Color track, Color progress}) _defaults = (
+    track: const Color(0xFFB8C7CB),
+    progress: const Color(0xFF2962FF),
+  );
+  bool _cupertino = false;
+
+  bool _dependenciesReady = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _dependenciesReady = true;
+    // Marching stripes loop forever: honour reduce motion.
+    final AnimationController? stripes = _stripeController;
+    if (stripes == null) return;
+    if (acdReduceMotion(context)) {
+      stripes.stop();
+    } else if (!stripes.isAnimating) {
+      stripes.repeat();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    _cupertino = ACDDesign.resolve(context, widget.design).isCupertino;
+    _defaults = acdLoaderDefaults(context, widget.design);
     Widget content = Padding(
       padding: widget.padding,
       child: AnimatedBuilder(
-        animation: Listenable.merge([
-          _fillController,
-          if (_stripeController != null) _stripeController!,
-        ]),
+        animation: Listenable.merge([_fillController, ?_stripeController]),
         builder: (context, _) {
           final Widget row = Row(
             mainAxisSize: widget.width == null
@@ -410,7 +467,9 @@ class _ACDMultiSegmentPainter extends CustomPainter {
       radius: barRadius,
     );
 
-    if (stripes) {
+    // A non-positive/non-finite width would make the loop below never
+    // advance (release builds have no assert to catch it).
+    if (stripes && stripeWidth.isFinite && stripeWidth > 0) {
       final Paint stripePaint = Paint()..color = stripeColor;
       final double step = stripeWidth * 2;
       final double offset = stripeOffset % step;

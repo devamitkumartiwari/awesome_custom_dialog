@@ -1,6 +1,13 @@
-import 'package:flutter/material.dart';
+import 'dart:math' as math;
+
+import 'package:material_ui/material_ui.dart';
 
 import '../dashed/acd_dash_path.dart';
+import '../design/acd_design.dart';
+import '../design/acd_design_scope.dart';
+import '../design/internal/acd_adaptive_widgets.dart';
+import '../design/internal/acd_platform_support.dart';
+import 'acd_stepper_design.dart';
 import 'acd_step_shape.dart';
 import 'acd_step_status.dart';
 import 'acd_stepper_title_placement.dart';
@@ -71,7 +78,12 @@ class ACDStepper extends StatelessWidget {
     this.finishedLineColor,
     this.unfinishedLineColor,
     this.showLoadingAnimation = false,
-  }) : assert(steps.isNotEmpty, 'steps must not be empty');
+    this.design,
+  }) : assert(steps.isNotEmpty, 'steps must not be empty'),
+       assert(
+         activeStep >= 0 && activeStep <= steps.length,
+         'activeStep must be in 0..steps.length (steps.length = all finished)',
+       );
 
   /// Titles for each step, in order. Also determines the step count.
   final List<String> steps;
@@ -84,13 +96,17 @@ class ACDStepper extends StatelessWidget {
   /// Horizontal wizard bar vs. vertical timeline.
   final Axis direction;
 
-  /// Fired when a step marker is tapped, with its index. Fires regardless of
-  /// [steppingEnabled] so callers can validate before advancing.
+  /// Fired when a step marker is tapped, with its index. Update
+  /// [activeStep] here (after any validation) to move the stepper.
   final ValueChanged<int>? onStepReached;
 
-  /// When false, tapping a step never visually changes which step looks
-  /// active from within this widget alone — the caller decides whether to
-  /// update [activeStep] inside [onStepReached].
+  /// Has no effect: [ACDStepper] never changes [activeStep] by itself, so
+  /// there is nothing to disable. Update [activeStep] in [onStepReached],
+  /// or leave [onStepReached] `null` to make the markers non-tappable.
+  @Deprecated(
+    'Has no effect. Update activeStep in onStepReached, or pass a null '
+    'onStepReached for non-tappable markers.',
+  )
   final bool steppingEnabled;
 
   /// Default marker shape, ignored when [customStep] is supplied.
@@ -200,6 +216,11 @@ class ACDStepper extends StatelessWidget {
   /// its usual content.
   final bool showLoadingAnimation;
 
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign]. Cupertino
+  /// maps default colors to iOS system colors, uses an activity indicator
+  /// and press-dim (no ripple) on tappable markers.
+  final ACDDesign? design;
+
   ACDStepStatus _statusFor(int index) {
     if (index < activeStep) return ACDStepStatus.finished;
     if (index == activeStep) return ACDStepStatus.active;
@@ -232,7 +253,10 @@ class ACDStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ColorScheme scheme = Theme.of(context).colorScheme;
+    final ColorScheme scheme = acdStepperScheme(
+      context,
+      ACDDesign.resolve(context, design),
+    );
     return direction == Axis.horizontal
         ? _buildHorizontal(context, scheme)
         : _buildVertical(context, scheme);
@@ -306,15 +330,34 @@ class ACDStepper extends StatelessWidget {
           ),
         );
         if (!isLast) {
+          // The outer Column stretches its children, which would centre a
+          // bare SizedBox regardless of verticalAlignment: align the
+          // connector under the marker explicitly.
+          final double markerWidth = customStep == null
+              ? _markerExtent(context)
+              : lineThickness;
           children.add(
-            SizedBox(
-              height: 24,
-              width: lineThickness,
-              child: _line(context, i, Axis.vertical),
+            Align(
+              alignment: switch (verticalAlignment) {
+                CrossAxisAlignment.start => AlignmentDirectional.centerStart,
+                CrossAxisAlignment.end => AlignmentDirectional.centerEnd,
+                _ => Alignment.center,
+              },
+              child: SizedBox(
+                height: 24,
+                width: markerWidth,
+                child: Center(
+                  child: SizedBox(
+                    width: lineThickness,
+                    child: _line(context, i, Axis.vertical),
+                  ),
+                ),
+              ),
             ),
           );
         }
-      } else {
+      } else if (customStep != null) {
+        // A custom marker has an unknown size: measure the row intrinsically.
         children.add(
           IntrinsicHeight(
             child: Row(
@@ -339,12 +382,70 @@ class ACDStepper extends StatelessWidget {
             ),
           ),
         );
+      } else {
+        // Built-in markers have a known extent, so the row lays out in a
+        // single pass (no IntrinsicHeight): the title sets the height and
+        // the marker + connector are positioned against it.
+        final double extent = _markerExtent(context);
+        children.add(
+          Stack(
+            children: [
+              Padding(
+                padding: EdgeInsetsDirectional.only(start: extent + 12),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: extent),
+                  child: title == null
+                      ? const SizedBox(width: double.infinity)
+                      : Align(
+                          alignment: switch (verticalAlignment) {
+                            CrossAxisAlignment.center =>
+                              AlignmentDirectional.centerStart,
+                            CrossAxisAlignment.end =>
+                              AlignmentDirectional.bottomStart,
+                            _ => AlignmentDirectional.topStart,
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: title,
+                          ),
+                        ),
+                ),
+              ),
+              if (!isLast)
+                PositionedDirectional(
+                  start: extent / 2,
+                  width: 0,
+                  top: extent,
+                  bottom: 0,
+                  child: _line(context, i, Axis.vertical),
+                ),
+              PositionedDirectional(
+                start: 0,
+                top: 0,
+                width: extent,
+                height: extent,
+                child: Center(child: marker),
+              ),
+            ],
+          ),
+        );
       }
     }
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: children,
+    );
+  }
+
+  /// The laid-out size of a built-in marker: its diameter, grown to the
+  /// 48 dp / 44 pt tap target when markers are tappable.
+  double _markerExtent(BuildContext context) {
+    final double diameter = stepRadius * 2;
+    if (onStepReached == null) return diameter;
+    return math.max(
+      diameter,
+      acdMinTapTarget(ACDDesign.resolve(context, design)),
     );
   }
 
@@ -379,10 +480,18 @@ class ACDStepper extends StatelessWidget {
       content = SizedBox(
         width: stepRadius,
         height: stepRadius,
-        child: CircularProgressIndicator(strokeWidth: 2, color: iconColor),
+        child: ACDAdaptiveProgress(
+          design: ACDDesign.resolve(context, design),
+          strokeWidth: 2,
+          color: iconColor,
+        ),
       );
     } else if (status == ACDStepStatus.finished) {
-      content = Icon(Icons.check, color: iconColor, size: stepRadius);
+      content = Icon(
+        ACDIcon.check.of(ACDDesign.resolve(context, design)),
+        color: iconColor,
+        size: stepRadius,
+      );
     } else {
       content = Text(
         '${index + 1}',
@@ -426,14 +535,46 @@ class ACDStepper extends StatelessWidget {
       child: content,
     );
 
-    return InkWell(
-      onTap: onStepReached == null ? null : () => onStepReached!(index),
-      customBorder: stepShape == ACDStepShape.circle
-          ? const CircleBorder()
-          : RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(stepBorderRadius),
-            ),
-      child: box,
+    final ACDResolvedDesign resolved = ACDDesign.resolve(context, design);
+    final VoidCallback? onTap = onStepReached == null
+        ? null
+        : () => onStepReached!(index);
+    // "Step 2 of 5, completed" for screen readers (the visible number/check
+    // alone doesn't convey position or state).
+    Widget labelled(Widget child) => Semantics(
+      label: ACDDesignScope.stringsOf(context)
+          .stepLabel(index, steps.length, status.name),
+      button: onTap != null,
+      selected: status == ACDStepStatus.active,
+      // The inner gesture's own tap action is excluded below, so expose it
+      // here.
+      onTap: onTap,
+      excludeSemantics: true,
+      child: child,
+    );
+    // Tappable markers get a 48 dp / 44 pt hit area (and semantics rect);
+    // display-only markers keep their exact size.
+    final Widget target = onTap == null
+        ? box
+        : ACDTapTargetBox(design: resolved, child: box);
+    if (resolved.isCupertino) {
+      return labelled(
+        ACDAdaptiveTappable(design: resolved, onTap: onTap, child: target),
+      );
+    }
+    return labelled(
+      acdEnsureMaterial(
+        context,
+        InkWell(
+          onTap: onTap,
+          customBorder: stepShape == ACDStepShape.circle
+              ? const CircleBorder()
+              : RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(stepBorderRadius),
+                ),
+          child: target,
+        ),
+      ),
     );
   }
 
@@ -442,8 +583,14 @@ class ACDStepper extends StatelessWidget {
     final Color color =
         (isFinished ? finishedLineColor : unfinishedLineColor) ??
         (isFinished
-            ? Theme.of(context).colorScheme.primary
-            : Theme.of(context).colorScheme.outlineVariant);
+            ? acdStepperScheme(
+                context,
+                ACDDesign.resolve(context, design),
+              ).primary
+            : acdStepperScheme(
+                context,
+                ACDDesign.resolve(context, design),
+              ).outlineVariant);
     return CustomPaint(
       painter: _ACDStepperLinePainter(
         axis: axis,

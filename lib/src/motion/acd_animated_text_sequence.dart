@@ -1,6 +1,6 @@
 import 'dart:async' show Timer;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'acd_animated_text.dart';
 import 'acd_motion_effect.dart';
@@ -77,9 +77,25 @@ class ACDAnimatedTextSequence extends StatefulWidget {
 
 class _ACDAnimatedTextSequenceState extends State<ACDAnimatedTextSequence> {
   int _index = 0;
+
+  /// Bumped on every step change (including a loop back to the same index,
+  /// e.g. a single-step looping sequence) so the child is rebuilt and its
+  /// entrance replays.
+  int _play = 0;
   Timer? _holdTimer;
 
   ACDAnimatedTextSequenceStep get _current => widget.children[_index];
+
+  @override
+  void didUpdateWidget(covariant ACDAnimatedTextSequence oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Children may shrink below the active index between builds.
+    if (_index >= widget.children.length) {
+      _holdTimer?.cancel();
+      _index = widget.children.length - 1;
+      _play += 1;
+    }
+  }
 
   @override
   void dispose() {
@@ -92,13 +108,19 @@ class _ACDAnimatedTextSequenceState extends State<ACDAnimatedTextSequence> {
     final bool isLast = _index == widget.children.length - 1;
     if (isLast) {
       if (widget.loop) {
-        setState(() => _index = 0);
+        setState(() {
+          _index = 0;
+          _play += 1;
+        });
         widget.onStepChanged?.call(_index);
       } else {
         widget.onSequenceComplete?.call();
       }
     } else {
-      setState(() => _index += 1);
+      setState(() {
+        _index += 1;
+        _play += 1;
+      });
       widget.onStepChanged?.call(_index);
     }
   }
@@ -122,7 +144,7 @@ class _ACDAnimatedTextSequenceState extends State<ACDAnimatedTextSequence> {
   Widget build(BuildContext context) {
     final ACDAnimatedTextSequenceStep step = _current;
     Widget content = ACDAnimatedText(
-      key: ValueKey(_index),
+      key: ValueKey(_play),
       text: step.text,
       style: step.style,
       effect:

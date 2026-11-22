@@ -1,5 +1,7 @@
+import 'dart:async';
+
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -222,6 +224,54 @@ void main() {
 
     expect(calls, containsAll(<int>[0, 1]));
   });
+
+  testWidgets(
+    'a new query while a load-more is in flight still paginates the new '
+    'results (the superseded response is discarded)',
+    (tester) async {
+      final calls = <String>[];
+      final Completer<List<String>> hung = Completer<List<String>>();
+      Future<List<String>> loadPage(String query, int page) {
+        calls.add('$query:$page');
+        if (query.isEmpty && page == 1) return hung.future; // never resolves
+        if (page >= 2) return Future.value(const <String>[]);
+        return Future.value(
+          List.generate(30, (i) => '$query Item ${page * 30 + i}'),
+        );
+      }
+
+      await tester.pumpWidget(
+        wrap(
+          SizedBox(
+            height: 400,
+            child: ACDDropdownField<String>(
+              items: const [],
+              onFindPaged: loadPage,
+              popupHeight: 300,
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byType(GestureDetector));
+      await tester.pumpAndSettle();
+
+      // Trigger load-more for '' page 1 — it hangs.
+      await tester.drag(find.byType(ListView), const Offset(0, -5000));
+      await tester.pump();
+      expect(calls, contains(':1'));
+
+      // New query resets while that load-more is still in flight.
+      await tester.enterText(find.byType(TextField), 'x');
+      await tester.pump(const Duration(seconds: 1)); // debounce
+      await tester.pumpAndSettle();
+      expect(calls, contains('x:0'));
+
+      // Scrolling the new results must still paginate.
+      await tester.drag(find.byType(ListView), const Offset(0, -5000));
+      await tester.pumpAndSettle();
+      expect(calls, contains('x:1'));
+    },
+  );
 }
 
 class _Item {

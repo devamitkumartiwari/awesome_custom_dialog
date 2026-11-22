@@ -1,13 +1,21 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:cupertino_ui/cupertino_ui.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../design/acd_design.dart';
+import '../design/acd_design_scope.dart';
+import '../design/internal/acd_adaptive_widgets.dart';
+import '../design/internal/acd_platform_support.dart';
 import 'acd_animation.dart';
+import 'acd_async_feedback.dart';
 import 'acd_children.dart';
 import 'acd_content_type.dart';
 import 'acd_gravity.dart';
 import 'acd_overlay_transition.dart';
 import 'acd_presenter.dart';
+import 'acd_sheet_drag.dart';
 import '../motion/acd_stagger_options.dart';
 import '../toast/toast.dart';
 import '../toast_snackbar/acd_snackbar_content.dart';
@@ -29,7 +37,60 @@ class ACDDialog {
   /// Creates an empty dialog. Chain [build] and content-adding methods, then
   /// call [show]. Explicit unnamed constructor required because a factory
   /// constructor is also declared below ([ACDDialog.toast]).
-  ACDDialog();
+  ///
+  /// [design] picks Material (default), Cupertino, or adaptive rendering
+  /// for the dialog card, its buttons, lists and fields — see [ACDDesign].
+  ACDDialog({this.design});
+
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign]. Applies to
+  /// the card and to every builder method's content (buttons, lists, text
+  /// fields, progress). `null` defers to the nearest [ACDDesignScope].
+  ACDDesign? design;
+
+  /// Resolves [design] against [context] (scope, platform).
+  ACDResolvedDesign resolveDesign(BuildContext context) =>
+      ACDDesign.resolve(context, design);
+
+  // ── Result ────────────────────────────────────────────────────────────────
+  Completer<Object?>? _result;
+  Object? _pendingResult;
+
+  /// Sets the value [showForResult] completes with when this dialog is
+  /// dismissed. `ACDAction`s set it automatically from their `value`; call
+  /// it yourself from custom content, then [dismiss].
+  void setResult(Object? value) => _pendingResult = value;
+
+  void _completeResult(Object? fallback) {
+    final Completer<Object?>? c = _result;
+    _result = null;
+    final Object? value = _pendingResult ?? fallback;
+    _pendingResult = null;
+    if (c != null && !c.isCompleted) c.complete(value);
+  }
+
+  /// Like [show], but returns a future that completes when the dialog is
+  /// dismissed — with the chosen `ACDAction.value` (or the value passed to
+  /// [setResult]), or `null` when dismissed any other way (barrier tap,
+  /// back button, auto-dismiss).
+  ///
+  /// ```dart
+  /// final bool? delete = await ACDDialog(design: ACDDesign.adaptive)
+  ///     .build(context)
+  ///     .text(text: 'Delete this photo?')
+  ///     .actions(const [
+  ///       ACDAction(label: 'Cancel', role: ACDActionRole.cancel),
+  ///       ACDAction(label: 'Delete', role: ACDActionRole.destructive,
+  ///           value: true),
+  ///     ])
+  ///     .showForResult<bool>();
+  /// ```
+  Future<T?> showForResult<T>([double? x, double? y]) {
+    _completeResult(null); // settle any previous showing
+    final Completer<Object?> completer = Completer<Object?>();
+    _result = completer;
+    if (!_present(x, y)) _completeResult(null);
+    return completer.future.then((Object? v) => v is T ? v : null);
+  }
 
   // ── Widget content ────────────────────────────────────────────────────────
   /// The content widgets added so far via [widget] and the builder methods.
@@ -98,8 +159,10 @@ class ACDDialog {
   Decoration? decoration;
 
   /// Background color of the dialog card. Ignored when [backgroundGradient]
-  /// or [decoration] is set.
-  Color backgroundColor = Colors.white;
+  /// or [decoration] is set. `null` (the default) means white for Material
+  /// and the iOS translucent alert surface (with background blur) for
+  /// Cupertino.
+  Color? backgroundColor;
 
   /// Gradient fill, overriding [backgroundColor]. Ignored when [decoration]
   /// is set.
@@ -151,6 +214,15 @@ class ACDDialog {
   /// Accessibility label read out for the barrier behind the dialog.
   String barrierLabel = 'Dialog';
 
+  /// Whether system back (Android back button / predictive back gesture,
+  /// Esc) may close the dialog. `false` keeps it open — pair with
+  /// [onPopInvoked] to e.g. confirm discarding changes first.
+  bool canPop = true;
+
+  /// Called whenever a pop is attempted — `didPop` is `false` when
+  /// [canPop] blocked it.
+  PopInvokedWithResultCallback<Object?>? onPopInvoked;
+
   // ── New properties ────────────────────────────────────────────────────────
   /// If set, the dialog dismisses itself automatically after this duration.
   Duration? autoDismissAfter;
@@ -159,9 +231,10 @@ class ACDDialog {
   /// to `true` automatically for top/bottom [gravity].
   bool respectSafeArea = false;
 
-  /// Called when the user taps outside the dialog. When set, this replaces
-  /// the default dismiss-on-barrier-tap behavior — call [dismiss] yourself
-  /// if you still want it to close.
+  /// Called when the user taps outside the dialog, before it closes. The
+  /// dialog then closes like a back press, so a [canPop]`: false` (or an
+  /// [onPopInvoked] veto) keeps it open. Setting this ignores
+  /// [barrierDismissible].
   VoidCallback? onBarrierTap;
 
   /// When `true`, uses `Theme.of(context).dialogTheme`'s background color
@@ -205,14 +278,32 @@ class ACDDialog {
   bool _overlayMode = false;
   OverlayEntry? _overlayEntry;
 
+  // The modal-path presenter (owns the pushed route), so dismiss() removes
+  // this dialog's own route rather than popping whatever is on top.
+  ACD? _presenter;
+
+  // Pending autoDismissAfter timer — cancelled on dismiss/re-show so a stale
+  // timer from a previous showing can never close a later one.
+  Timer? _autoDismissTimer;
+
   // ── Toast-mode presentation ──────────────────────────────────────────────
   // Used by .toast(): delegates presentation/stacking/lifecycle entirely to
   // ACDToastManager instead of the plain overlay path above, so multiple
   // toasts can stack, animate out, show a progress bar, etc. See
   // lib/src/toast/.
   bool _toastMode = false;
+
+  // Bottom-sheet presentation (see ACDDialog.bottomSheet): handle + drag.
+  bool _sheetMode = false;
+  bool _sheetShowHandle = true;
+  bool _sheetDragToDismiss = true;
   ACDToastConfig? _toastConfig;
   ACDToastController? _toastController;
+
+  /// For a dialog made with [ACDDialog.toast] / [ACDDialog.snackbar]-style
+  /// toasts: completes once the toast is gone, with why it closed. `null`
+  /// until [show] has been called (and for non-toast dialogs).
+  Future<ACDToastDismissReason>? get toastClosed => _toastController?.closed;
 
   // ── Static helpers ────────────────────────────────────────────────────────
 
@@ -233,6 +324,158 @@ class ACDDialog {
   /// Dismisses every currently showing/queued toast. For finer-grained
   /// control (dismiss by id, one position only, oldest/newest only), use
   /// `ACDToastManager` directly.
+  /// Shows a blocking progress dialog (spinner + optional [message]) while
+  /// [future] runs, then returns its value — or rethrows its error.
+  ///
+  /// ```dart
+  /// final user = await ACDDialog.loading(
+  ///   context: context,
+  ///   future: api.signIn(email, password),
+  ///   message: 'Signing in…',
+  /// );
+  /// ```
+  ///
+  /// - [showAfter]: wait this long before showing anything, so fast work
+  ///   never flashes a dialog.
+  /// - [minDisplay]: once shown, stay up at least this long (no flicker).
+  /// - [cancelable]: adds a Cancel button. Tapping it makes the returned
+  ///   future throw [ACDLoadingCanceled] (the work itself keeps running).
+  ///
+  /// The dialog can't be dismissed by the barrier or back button.
+  static Future<T> loading<T>({
+    required BuildContext context,
+    required Future<T> future,
+    String? message,
+    ACDDesign? design,
+    Duration showAfter = Duration.zero,
+    Duration minDisplay = const Duration(milliseconds: 500),
+    bool cancelable = false,
+    String? cancelLabel,
+  }) => acdShowLoading<T>(
+    context: context,
+    future: future,
+    message: message,
+    design: design,
+    showAfter: showAfter,
+    minDisplay: minDisplay,
+    cancelable: cancelable,
+    cancelLabel: cancelLabel,
+  );
+
+  /// A toast that shows [loading] (with a spinner) while [future] runs,
+  /// then turns into a success or error toast *in place* — no second toast.
+  /// Returns [future]'s value, or rethrows its error.
+  ///
+  /// ```dart
+  /// await ACDDialog.promiseToast(
+  ///   context: context,
+  ///   future: repo.save(note),
+  ///   loading: 'Saving…',
+  ///   success: (_) => 'Saved',
+  ///   error: (e) => 'Could not save',
+  /// );
+  /// ```
+  static Future<T> promiseToast<T>({
+    required BuildContext context,
+    required Future<T> future,
+    required String loading,
+    required String Function(T value) success,
+    required String Function(Object error) error,
+    ACDGravity? gravity,
+    Duration resultDuration = const Duration(seconds: 3),
+    ACDDesign? design,
+  }) => acdPromiseToast<T>(
+    context: context,
+    future: future,
+    loading: loading,
+    success: success,
+    error: error,
+    gravity: gravity,
+    resultDuration: resultDuration,
+    design: design,
+  );
+
+  /// A toast with an Undo action and a countdown bar. Completes with `true`
+  /// if the user tapped Undo, `false` once it closed any other way — so the
+  /// destructive work can run only after the undo window:
+  ///
+  /// ```dart
+  /// hideLocally(item);
+  /// final undone = await ACDDialog.undoToast(
+  ///   context: context,
+  ///   message: 'Message deleted',
+  /// );
+  /// undone ? showAgain(item) : await api.delete(item);
+  /// ```
+  ///
+  /// Under TalkBack/VoiceOver the toast stays up until dismissed, so the
+  /// Undo button is reachable.
+  static Future<bool> undoToast({
+    required BuildContext context,
+    required String message,
+    String? undoLabel,
+    VoidCallback? onUndo,
+    Duration duration = const Duration(seconds: 5),
+    ACDGravity? gravity,
+    bool showProgressBar = true,
+    ACDDesign? design,
+  }) => acdUndoToast(
+    context: context,
+    message: message,
+    undoLabel: undoLabel,
+    onUndo: onUndo,
+    duration: duration,
+    gravity: gravity,
+    showProgressBar: showProgressBar,
+    design: design,
+  );
+
+  /// A modal bottom sheet: full width, docked to the bottom with rounded
+  /// top corners, sliding up from the edge. Add content with the usual
+  /// builder methods, then [show] / [showForResult].
+  ///
+  /// ```dart
+  /// final choice = await ACDDialog.bottomSheet(context: context)
+  ///     .text(text: 'Share to…')
+  ///     .listOfACDListTile(items: targets, onItemTap: ...)
+  ///     .showForResult<String>();
+  /// ```
+  ///
+  /// - [showDragHandle]: a grab handle at the top.
+  /// - [dragToDismiss]: drag down (or flick) to close. Turned off when
+  ///   [canPop] is `false`.
+  /// - [maxHeightFraction]: caps the sheet's height as a fraction of the
+  ///   screen; content beyond it should scroll (e.g. a list).
+  ///
+  /// The sheet stays above the on-screen keyboard. Material uses 28 dp top
+  /// corners (Material 3); Cupertino 12 pt.
+  factory ACDDialog.bottomSheet({
+    BuildContext? context,
+    ACDDesign? design,
+    bool showDragHandle = true,
+    bool dragToDismiss = true,
+    double maxHeightFraction = 0.9,
+    Color? backgroundColor,
+  }) {
+    assert(
+      maxHeightFraction > 0 && maxHeightFraction <= 1,
+      'maxHeightFraction must be in (0, 1]',
+    );
+    final ACDDialog dialog = ACDDialog(design: design)
+      ..context = context ?? _context
+      ..gravity = ACDGravity.bottom
+      ..width = double.infinity
+      ..gravityAnimationEnable = true
+      ..backgroundColor = backgroundColor
+      .._sheetMode = true
+      .._sheetShowHandle = showDragHandle
+      .._sheetDragToDismiss = dragToDismiss
+      .._sheetMaxHeightFraction = maxHeightFraction;
+    return dialog;
+  }
+
+  double _sheetMaxHeightFraction = 0.9;
+
   static void cancelToast() {
     ACDToastManager.dismissAll();
   }
@@ -268,6 +511,8 @@ class ACDDialog {
   factory ACDDialog.toast({
     required BuildContext context,
     required String message,
+    // Material (default) / Cupertino / adaptive — see ACDDesign.
+    ACDDesign? design,
     // Nullable so precedence between showDuration and length is
     // unambiguous — explicit showDuration always wins, length is a
     // convenience shortcut, and omitting both keeps the original 2-second
@@ -404,9 +649,10 @@ class ACDDialog {
       onCloseButtonTap: onCloseButtonTap,
       onAutoDismiss: onAutoDismiss,
       onShown: onShown,
+      design: design,
     );
 
-    return ACDDialog()
+    return ACDDialog(design: design)
       ..build(context)
       .._toastMode = true
       .._toastConfig = config;
@@ -422,6 +668,8 @@ class ACDDialog {
     required BuildContext context,
     required String title,
     required String message,
+    // Material (default) / Cupertino / adaptive — see ACDDesign.
+    ACDDesign? design,
     ACDContentType contentType = ACDContentType.success,
     Color? color,
     Gradient? gradient,
@@ -446,7 +694,7 @@ class ACDDialog {
     double elevation = 0,
     List<BoxShadow>? boxShadow,
   }) {
-    final dialog = ACDDialog()
+    final dialog = ACDDialog(design: design)
       ..build(context)
       .._overlayMode = true
       ..gravity = ACDGravity.bottom
@@ -482,6 +730,7 @@ class ACDDialog {
         // FEAT-16: default close action dismisses this overlay dialog, not a
         // ScaffoldMessenger — there isn't one involved in this code path.
         onClose: onClose ?? dialog.dismiss,
+        design: design,
       ),
     );
 
@@ -492,45 +741,125 @@ class ACDDialog {
 
   /// Displays the dialog. Requires [context] to be set (via [build] or
   /// [ACDDialog.init]) — does nothing otherwise. Pass [x]/[y] to position the
-  /// dialog at exact screen coordinates instead of using [gravity].
-  void show([double? x, double? y]) {
-    if (context == null) return;
+  /// dialog at exact screen coordinates (from the physical top-left, in
+  /// both reading directions) instead of using [gravity].
+  ///
+  /// Calling [show] again while this dialog is still showing first closes
+  /// the earlier showing, so one builder never has two live copies.
+  void show([double? x, double? y]) => _present(x, y);
+
+  /// Like [show], but returns a future that completes once this showing is
+  /// gone (dismissed any way, or replaced by another [show]) — or right
+  /// away if nothing could be shown. Unlike [showForResult] it never touches
+  /// the result. `ACDDialogQueue` uses it to sequence dialogs.
+  Future<void> showAndWait([double? x, double? y]) {
+    if (!_present(x, y)) return Future<void>.value();
+    final Completer<void> ended = Completer<void>();
+    _endWaiters[_session] = ended;
+    return ended.future;
+  }
+
+  /// Showings still on screen. Every way a showing can end (content
+  /// disposed, route completed, entry torn down, toast disposed) reports
+  /// here; only the first report per session counts.
+  final Set<int> _liveSessions = <int>{};
+  final Map<int, Completer<void>> _endWaiters = <int, Completer<void>>{};
+
+  /// Increments on every presentation. Callbacks belonging to an earlier
+  /// showing compare against it, so a stale route/toast finishing its exit
+  /// can't flip [isShowing] or complete a newer [showForResult].
+  int _session = 0;
+
+  /// The overlay [_overlayEntry] was inserted into, to know whether it's
+  /// still safe to remove the entry.
+  OverlayState? _overlayState;
+
+  /// Presents the dialog; returns whether anything was actually shown.
+  bool _present(double? x, double? y) {
+    final BuildContext? ctx = context;
+    if (ctx == null) return false;
+    if (!ctx.mounted) {
+      _reportMisuse(
+        'ACDDialog.show() was called with a BuildContext that is no longer '
+        'mounted (its widget was removed, e.g. after an `await`). Check '
+        '`context.mounted` before showing, or pass a live context to build().',
+      );
+      return false;
+    }
+
+    _teardownCurrent();
+    final int session = ++_session;
+    _liveSessions.add(session);
     _contentVisible.value = true;
 
     if (_toastMode) {
-      _toastController = ACDToastManager.show(context!, _toastConfig!);
+      // Route the toast's own lifecycle into this dialog's callbacks, so
+      // dismissCallBack/showCallBack (and therefore ACDDialogQueue) work
+      // for toasts too.
+      final ACDToastConfig config = _toastConfig!;
+      _toastController = ACDToastManager.show(
+        ctx,
+        config.copyWith(
+          onShown: () {
+            config.onShown?.call();
+            if (session == _session) showCallBack?.call();
+          },
+          onDismissed: () {
+            config.onDismissed?.call();
+            _onPresentationEnded(session);
+          },
+        ),
+      );
       _isShowing = true;
-      return;
+      return true;
     }
 
     // FEAT-15/FEAT-16: overlay-mode presentation (never blocks touches)
-    if (_overlayMode) {
-      _showViaOverlay();
-      return;
+    if (_overlayMode) return _showViaOverlay(ctx, session);
+
+    if (Navigator.maybeOf(ctx, rootNavigator: useRootNavigator) == null) {
+      _reportMisuse(
+        'ACDDialog.show() could not find a Navigator above the given '
+        'context. Use a context below your MaterialApp/CupertinoApp/'
+        'WidgetsApp (e.g. from a Scaffold body or a Builder).',
+      );
+      return false;
     }
 
-    if (x != null && y != null) {
-      gravity = ACDGravity.leftTop;
-      margin = EdgeInsets.only(left: x, top: y);
-    }
-
-    final EdgeInsets effectiveMargin = _resolveMargin();
-    final Function(Widget, Animation<double>)? effectiveAnimFn =
-        _resolveAnimFn();
+    // Exact coordinates are physical (top-left origin) in every reading
+    // direction, and apply to this showing only — gravity/margin are left
+    // untouched for the next show().
+    final bool absolute = x != null && y != null;
+    final ACDGravity effectiveGravity = absolute ? ACDGravity.leftTop : gravity;
+    final EdgeInsets effectiveMargin = absolute
+        ? EdgeInsets.only(left: x, top: y)
+        // A sheet is flush with the screen edges unless a margin was set
+        // (the bottom-gravity default would float it 24/16 px in).
+        : (_sheetMode && margin == EdgeInsets.zero)
+        ? EdgeInsets.zero
+        : _resolveMargin();
+    final Function(Widget, Animation<double>)? effectiveAnimFn = _resolveAnimFn(
+      acdReduceMotion(ctx),
+    );
 
     Widget dialogContent = Padding(
       padding: effectiveMargin,
       child: Column(
-        textDirection: textDirection,
-        mainAxisAlignment: acdColumnMainAxisAlignment(gravity),
-        crossAxisAlignment: acdColumnCrossAxisAlignment(gravity),
-        children: [_buildContentCard()],
+        // Column.textDirection only orders/aligns the card itself; the
+        // card's content keeps the ambient Directionality.
+        textDirection: absolute ? TextDirection.ltr : textDirection,
+        mainAxisAlignment: acdColumnMainAxisAlignment(effectiveGravity),
+        crossAxisAlignment: acdColumnCrossAxisAlignment(effectiveGravity),
+        children: [_buildContentCard(session)],
       ),
     );
 
     // Default respectSafeArea to true for top/bottom if not explicitly set
+    // (a sheet instead runs to the bottom edge; its content is inset).
     bool effectiveRespectSafeArea = respectSafeArea;
-    if (gravity == ACDGravity.top || gravity == ACDGravity.bottom) {
+    if (!_sheetMode &&
+        (effectiveGravity == ACDGravity.top ||
+            effectiveGravity == ACDGravity.bottom)) {
       effectiveRespectSafeArea = true;
     }
 
@@ -538,10 +867,10 @@ class ACDDialog {
       dialogContent = SafeArea(child: dialogContent);
     }
 
-    ACD(
+    _presenter = ACD(
       child: dialogContent,
-      context: context!,
-      gravity: gravity,
+      context: ctx,
+      gravity: effectiveGravity,
       gravityAnimationEnable: gravityAnimationEnable,
       barrierColor: barrierColor,
       animatedFunc: effectiveAnimFn,
@@ -549,13 +878,93 @@ class ACDDialog {
       duration: duration,
       useRootNavigator: useRootNavigator,
       // BUG-03 fix
-      barrierLabel: barrierLabel,
+      barrierLabel: barrierLabel == 'Dialog'
+          ? ACDDesignScope.stringsOf(ctx).dialogLabel
+          : barrierLabel,
       // IMP-08
       onBarrierTap: onBarrierTap, // FEAT-12
       textDirection: textDirection,
+      cupertinoTransition: resolveDesign(ctx).isCupertino,
+      canPop: canPop,
+      onPopInvoked: onPopInvoked,
+    );
+    // Also covers a route removed before its content ever built (shown and
+    // replaced in the same frame), where ACDChildren never reports.
+    _presenter!.route.completed.whenComplete(
+      () => scheduleMicrotask(() => _onPresentationEnded(session)),
     );
 
-    _scheduleAutoDismiss();
+    _scheduleAutoDismiss(session);
+    return true;
+  }
+
+  /// Runs when the content of showing [session] is finally gone (route
+  /// disposed, overlay entry removed, toast disposed).
+  void _onPresentationEnded(int session) {
+    if (!_liveSessions.remove(session)) return; // already reported
+    _endWaiters.remove(session)?.complete();
+    if (session == _session) {
+      _isShowing = false;
+      _autoDismissTimer?.cancel();
+      _autoDismissTimer = null;
+      _completeResult(null);
+    }
+    // The user's callback still runs once per showing, even a superseded
+    // one — but guarded, so a throwing callback can't break teardown.
+    final VoidCallback? callback = dismissCallBack;
+    if (callback == null) return;
+    try {
+      callback();
+    } catch (error, stack) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stack,
+          library: 'awesome_custom_dialog',
+          context: ErrorDescription('while calling ACDDialog.dismissCallBack'),
+        ),
+      );
+    }
+  }
+
+  /// Immediately removes whatever this dialog currently has on screen
+  /// (route, overlay entry or toast), without a staggered exit.
+  void _teardownCurrent() {
+    _autoDismissTimer?.cancel();
+    _autoDismissTimer = null;
+
+    final OverlayEntry? entry = _overlayEntry;
+    final OverlayState? overlay = _overlayState;
+    _overlayEntry = null;
+    _overlayState = null;
+    if (entry != null) {
+      if (overlay?.mounted ?? false) entry.remove();
+      // Covers an entry removed before its content ever built.
+      final int ended = _session;
+      scheduleMicrotask(() => _onPresentationEnded(ended));
+    }
+
+    final ACD? presenter = _presenter;
+    _presenter = null;
+    presenter?.close();
+
+    final ACDToastController? toast = _toastController;
+    if (toast != null && !toast.isDismissing) {
+      toast.requestDismiss(
+        immediate: true,
+        reason: ACDToastDismissReason.replaced,
+      );
+    }
+  }
+
+  static void _reportMisuse(String message) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: FlutterError(message),
+        stack: StackTrace.current,
+        library: 'awesome_custom_dialog',
+      ),
+    );
   }
 
   /// Closes the dialog if it's currently showing. Does nothing otherwise.
@@ -564,13 +973,21 @@ class ACDDialog {
   /// callers that don't await the returned `Future` are unaffected (`void`
   /// call sites/`VoidCallback` assignments remain valid).
   Future<void> dismiss() async {
+    final int session = _session;
     if (_toastMode) {
       _toastController?.requestDismiss();
       _isShowing = false;
       return;
     }
-    if (!_isShowing) return;
+    // _isShowing only flips true after the first frame (ACDChildren.onShown),
+    // so also treat a still-active route/overlay entry as "showing" — a
+    // dismiss() issued right after show() must still close the dialog.
+    final bool presented =
+        (_presenter?.route.isActive ?? false) || _overlayEntry != null;
+    if (!_isShowing && !presented) return;
     _isShowing = false;
+    _autoDismissTimer?.cancel();
+    _autoDismissTimer = null;
 
     final ACDStaggerOptions? options = contentStagger;
     if (options != null && widgetList.isNotEmpty) {
@@ -580,16 +997,14 @@ class ACDDialog {
             options.interval * (widgetList.length - 1) +
             options.itemDuration,
       );
-      if (context == null || !context!.mounted) return;
+      // A newer show() took over during the exit: it already removed this
+      // showing, and must not be closed by this stale dismiss.
+      if (session != _session) return;
     }
 
-    if (_overlayEntry != null) {
-      // FEAT-15/FEAT-16: overlay-mode teardown
-      _overlayEntry!.remove();
-      _overlayEntry = null;
-    } else {
-      Navigator.of(context!, rootNavigator: useRootNavigator).pop();
-    }
+    // Always tear down — even if the *caller's* context has since
+    // unmounted, the route/entry belongs to this dialog and must go.
+    _teardownCurrent();
   }
 
   // ── Internal helpers ──────────────────────────────────────────────────────
@@ -598,63 +1013,123 @@ class ACDDialog {
       acdResolveMarginForGravity(gravity, margin, textDirection);
 
   // Resolve animation function: explicit > preset enum > none
-  Function(Widget, Animation<double>)? _resolveAnimFn() {
+  // Under reduce motion, built-in presets are dropped (the presenter then
+  // fades); an explicit animatedFunc is the caller's choice and is kept.
+  Function(Widget, Animation<double>)? _resolveAnimFn(bool reduceMotion) {
+    if (animatedFunc == null && reduceMotion) return null;
     return animatedFunc ??
         (animation != ACDAnimation.none
             ? acdPresetAnimFn(animation, textDirection)
             : null);
   }
 
-  Widget _buildContentCard() {
+  // The card is built lazily inside the presented route, so the design (and
+  // dark-mode tokens) resolve against the route's own context.
+  Widget _buildContentCard(int session) => Builder(
+    builder: (BuildContext context) => _buildContentCardIn(context, session),
+  );
+
+  Widget _buildContentCardIn(BuildContext context, int session) {
+    final ACDResolvedDesign resolved = resolveDesign(context);
+    final bool cupertino = resolved.isCupertino;
+    // iOS alert surface: translucent + blurred, resolved for brightness.
+    final bool blurSurface =
+        cupertino &&
+        !useTheme &&
+        backgroundColor == null &&
+        backgroundGradient == null &&
+        decoration == null;
     // IMP-10: use theme background when requested
     final Color effectiveBg = useTheme
-        ? (Theme.of(context!).dialogTheme.backgroundColor ?? Colors.white)
-        : backgroundColor;
+        ? (Theme.of(context).dialogTheme.backgroundColor ??
+              acdMaterialSurface(context))
+        : backgroundColor ??
+              (cupertino
+                  ? CupertinoDynamicColor.resolve(
+                      const CupertinoDynamicColor.withBrightness(
+                        color: Color(0xCCF2F2F2),
+                        darkColor: Color(0xBF1E1E1E),
+                      ),
+                      context,
+                    )
+                  : acdMaterialSurface(context));
     final BorderRadius effectiveRadius =
-        cornerRadius ?? BorderRadius.circular(borderRadius);
+        cornerRadius ??
+        (_sheetMode
+            ? BorderRadius.vertical(top: Radius.circular(cupertino ? 12 : 28))
+            : BorderRadius.circular(borderRadius));
 
-    final Widget content = ACDChildren(
+    final Widget children = ACDChildren(
       widgetList: widgetList,
       staggerOptions: contentStagger,
       visible: _contentVisible,
       onShown: () {
+        if (session != _session) return;
         _isShowing = true;
         showCallBack?.call();
       },
-      onDismissed: () {
-        _isShowing = false;
-        dismissCallBack?.call();
-      },
+      onDismissed: () => _onPresentationEnded(session),
     );
+    Widget content = _sheetMode && _sheetShowHandle
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ACDSheetHandle(design: resolved),
+              children,
+            ],
+          )
+        : children;
+    if (_sheetMode) {
+      // The card runs under the home indicator; its content doesn't.
+      content = SafeArea(top: false, left: false, right: false, child: content);
+    }
 
     // ShapeDecoration subsumes BoxDecoration's rectangle-only borderRadius,
     // so a custom shape (pill, notched, etc.) can carry the same
     // color/gradient/image fill as the default rounded-rect case — unlike
     // ACDToastConfig.shape, which is limited to a flat color fill.
     // decoration remains a full escape hatch overriding all of the above.
-    final Widget card = Material(
+    Widget body = Container(
+      width: width,
+      height: height,
+      decoration:
+          decoration ??
+          ShapeDecoration(
+            shape:
+                shape ?? RoundedRectangleBorder(borderRadius: effectiveRadius),
+            // ShapeDecoration (unlike BoxDecoration) forbids setting both
+            // color and gradient at once — gradient wins when set.
+            color: backgroundGradient == null ? effectiveBg : null,
+            gradient: backgroundGradient,
+            image: backgroundImage,
+          ),
+      constraints:
+          constraints ??
+          (_sheetMode
+              ? BoxConstraints(
+                  maxHeight:
+                      MediaQuery.sizeOf(context).height *
+                      _sheetMaxHeightFraction,
+                )
+              : const BoxConstraints()),
+      child: content,
+    );
+    if (blurSurface) {
+      // The clip below bounds the blur to the card's shape.
+      body = BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: body,
+      );
+    }
+    // Material: transparent Material (ink + text style), as before.
+    // Cupertino: clip + Cupertino text style, no Material ancestor.
+    final Widget card = ACDAdaptiveSurface(
+      design: resolved,
       clipBehavior: Clip.antiAlias,
-      type: MaterialType.transparency,
       shape: shape,
       borderRadius: shape == null ? effectiveRadius : null,
-      child: Container(
-        width: width,
-        height: height,
-        decoration:
-            decoration ??
-            ShapeDecoration(
-              shape:
-                  shape ??
-                  RoundedRectangleBorder(borderRadius: effectiveRadius),
-              // ShapeDecoration (unlike BoxDecoration) forbids setting both
-              // color and gradient at once — gradient wins when set.
-              color: backgroundGradient == null ? effectiveBg : null,
-              gradient: backgroundGradient,
-              image: backgroundImage,
-            ),
-        constraints: constraints ?? const BoxConstraints(),
-        child: content,
-      ),
+      child: body,
     );
 
     // Shadow always on the outermost, unclipped layer — a clip wrapper
@@ -670,18 +1145,34 @@ class ACDDialog {
                 ),
               ]
             : null);
-    if (effectiveShadow == null) return card;
-    return Container(
-      decoration: BoxDecoration(boxShadow: effectiveShadow),
-      child: card,
+    final Widget shadowed = effectiveShadow == null
+        ? card
+        : Container(
+            decoration: BoxDecoration(boxShadow: effectiveShadow),
+            child: card,
+          );
+    if (!_sheetMode) return shadowed;
+    return ACDSheetDrag(
+      enabled: _sheetDragToDismiss && canPop,
+      onDismiss: () {
+        if (session == _session) dismiss();
+      },
+      child: shadowed,
     );
   }
 
-  void _scheduleAutoDismiss() {
+  void _scheduleAutoDismiss(int session) {
     // FEAT-02: auto-dismiss timer
-    if (autoDismissAfter != null) {
-      Timer(autoDismissAfter!, () {
-        if (_isShowing) dismiss();
+    _autoDismissTimer?.cancel();
+    _autoDismissTimer = null;
+    final Duration? after = autoDismissAfter;
+    // Duration.zero (or negative) means "no auto-dismiss" — the same
+    // sticky meaning it has for toasts — rather than closing before the
+    // dialog's first frame.
+    if (after != null && after > Duration.zero) {
+      _autoDismissTimer = Timer(after, () {
+        _autoDismissTimer = null;
+        if (session == _session) dismiss();
       });
     }
   }
@@ -689,14 +1180,23 @@ class ACDDialog {
   // FEAT-15/FEAT-16: presents via a plain Overlay entry (Align + Padding, no
   // full-screen hit-testable widget) instead of showGeneralDialog, so taps
   // outside the card fall through to the app underneath. See _overlayMode.
-  void _showViaOverlay() {
-    final OverlayState overlayState = Overlay.of(
-      context!,
+  bool _showViaOverlay(BuildContext ctx, int session) {
+    final OverlayState? overlayState = Overlay.maybeOf(
+      ctx,
       rootOverlay: useRootNavigator,
     );
+    if (overlayState == null) {
+      _reportMisuse(
+        'ACDDialog.snackbar()/overlay mode could not find an Overlay above '
+        'the given context. Use a context below your MaterialApp/'
+        'CupertinoApp, or wrap the app with ACDToastLayer.',
+      );
+      return false;
+    }
     final EdgeInsets effectiveMargin = _resolveMargin();
-    final Function(Widget, Animation<double>)? effectiveAnimFn =
-        _resolveAnimFn();
+    final Function(Widget, Animation<double>)? effectiveAnimFn = _resolveAnimFn(
+      acdReduceMotion(ctx),
+    );
 
     final bool topSafe =
         gravity == ACDGravity.top ||
@@ -720,7 +1220,16 @@ class ACDDialog {
             child: ACDOverlayTransition(
               duration: duration,
               animatedFunc: effectiveAnimFn,
-              child: _buildContentCard(),
+              // Snackbars swipe away sideways, like Material's; the
+              // Dismissible already animated it out, so tear down at once.
+              child: Dismissible(
+                key: ValueKey<int>(session),
+                direction: DismissDirection.horizontal,
+                onDismissed: (_) {
+                  if (session == _session) _teardownCurrent();
+                },
+                child: _buildContentCard(session),
+              ),
             ),
           ),
         ),
@@ -728,8 +1237,10 @@ class ACDDialog {
     );
 
     _overlayEntry = entry;
+    _overlayState = overlayState;
     overlayState.insert(entry);
 
-    _scheduleAutoDismiss();
+    _scheduleAutoDismiss(session);
+    return true;
   }
 }

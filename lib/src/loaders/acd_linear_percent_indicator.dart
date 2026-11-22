@@ -1,6 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../design/acd_design.dart';
+import 'acd_loader_design.dart';
 import 'acd_loader_direction.dart';
+import 'acd_loader_motion.dart';
 import 'acd_loader_paint.dart';
 import 'acd_loader_stroke_cap.dart';
 import 'acd_percent_animation_mixin.dart';
@@ -61,6 +64,9 @@ class ACDLinearPercentIndicator extends StatefulWidget {
     this.maskFilter,
     this.indicator,
     this.keepAlive = false,
+    this.design,
+    this.indeterminate = false,
+    this.style = ACDLoaderStyle.flat,
     this.onAnimationEnd,
     this.onPercentChanged,
   });
@@ -197,6 +203,21 @@ class ACDLinearPercentIndicator extends StatefulWidget {
   /// screen.
   final bool keepAlive;
 
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign]. Picks the
+  /// default track/progress colors (also dark-mode aware) when
+  /// [backgroundColor]/[progressColor] aren't set.
+  final ACDDesign? design;
+
+  /// Shows an indeterminate loader (a sweeping segment / spinning arc —
+  /// the iOS activity indicator under the Cupertino design) instead of a
+  /// value. Screen readers hear "Loading" with no percentage.
+  final bool indeterminate;
+
+  /// [ACDLoaderStyle.wavy] draws the active track as a moving sine wave
+  /// (Material 3 Expressive). Gradients/borders/mask filters apply to the
+  /// flat style only.
+  final ACDLoaderStyle style;
+
   /// Fires once a fill animation finishes.
   final VoidCallback? onAnimationEnd;
 
@@ -238,6 +259,8 @@ class _ACDLinearPercentIndicatorState extends State<ACDLinearPercentIndicator>
   @override
   void didUpdateWidget(covariant ACDLinearPercentIndicator oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // AutomaticKeepAliveClientMixin only re-reads wantKeepAlive here.
+    if (oldWidget.keepAlive != widget.keepAlive) updateKeepAlive();
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller?.removeListener(_onControllerChanged);
       widget.controller?.addListener(_onControllerChanged);
@@ -306,27 +329,54 @@ class _ACDLinearPercentIndicatorState extends State<ACDLinearPercentIndicator>
                 widget.strokeCap == ACDLoaderStrokeCap.roundAll
             ? Radius.circular(widget.lineHeight / 2)
             : null);
-    final Widget? centerContent = _buildPercentageText();
+    // An indeterminate bar has no value to print.
+    final Widget? centerContent = widget.indeterminate
+        ? widget.center
+        : _buildPercentageText();
+
+    final ({Color track, Color progress}) defaults = acdLoaderDefaults(
+      context,
+      widget.design,
+    );
 
     Widget bar(double width) {
-      Widget painted = CustomPaint(
-        size: Size(width, widget.lineHeight),
-        painter: _ACDLinearPercentIndicatorPainter(
-          progress: currentAnimatedPercent,
-          rtlFill: rtlFill,
-          backgroundColor: widget.backgroundColor ?? const Color(0xFFB8C7CB),
-          progressColor:
-              widget.progressColor ?? Theme.of(context).colorScheme.primary,
-          progressBorderColor: widget.progressBorderColor,
-          backgroundBorderColor: widget.backgroundBorderColor,
-          borderWidth: widget.borderWidth,
-          linearGradient: widget.linearGradient,
-          backgroundGradient: widget.backgroundGradient,
-          strokeCap: widget.strokeCap,
-          barRadius: effectiveBarRadius,
-          maskFilter: widget.maskFilter,
-        ),
-      );
+      final bool needsClock =
+          widget.indeterminate || widget.style == ACDLoaderStyle.wavy;
+      Widget painted = needsClock
+          ? ACDLinearLoaderMotion(
+              size: Size(width, widget.lineHeight),
+              trackColor: widget.backgroundColor ?? defaults.track,
+              progressColor: widget.progressColor ?? defaults.progress,
+              radius: effectiveBarRadius,
+              indeterminate: widget.indeterminate,
+              wavy: widget.style == ACDLoaderStyle.wavy,
+              progress: currentAnimatedPercent,
+              rtl: rtlFill,
+              design: widget.design,
+            )
+          : CustomPaint(
+              size: Size(width, widget.lineHeight),
+              painter: _ACDLinearPercentIndicatorPainter(
+                progress: currentAnimatedPercent,
+                rtlFill: rtlFill,
+                backgroundColor: widget.backgroundColor ?? defaults.track,
+                progressColor: widget.progressColor ?? defaults.progress,
+                progressBorderColor: widget.progressBorderColor,
+                backgroundBorderColor: widget.backgroundBorderColor,
+                borderWidth: widget.borderWidth,
+                linearGradient: widget.linearGradient,
+                backgroundGradient: widget.backgroundGradient,
+                strokeCap: widget.strokeCap,
+                barRadius: effectiveBarRadius,
+                maskFilter: widget.maskFilter,
+              ),
+            );
+      if (!widget.indeterminate) {
+        painted = acdLoaderSemantics(
+          percent: currentAnimatedPercent,
+          child: painted,
+        );
+      }
       if (widget.boxShadow != null) {
         painted = DecoratedBox(
           decoration: BoxDecoration(
@@ -338,7 +388,10 @@ class _ACDLinearPercentIndicatorState extends State<ACDLinearPercentIndicator>
           child: painted,
         );
       }
-      if (centerContent == null && widget.indicator == null) return painted;
+      if (centerContent == null &&
+          (widget.indicator == null || widget.indeterminate)) {
+        return painted;
+      }
       return SizedBox(
         width: width,
         height: widget.lineHeight,
@@ -347,7 +400,7 @@ class _ACDLinearPercentIndicatorState extends State<ACDLinearPercentIndicator>
           children: [
             Positioned.fill(child: painted),
             if (centerContent != null) Center(child: centerContent),
-            if (widget.indicator != null)
+            if (widget.indicator != null && !widget.indeterminate)
               Positioned(
                 left: rtlFill ? null : (width * currentAnimatedPercent) - 8,
                 right: rtlFill ? (width * currentAnimatedPercent) - 8 : null,

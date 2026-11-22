@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+import 'dart:math' as math;
+
+import 'package:material_ui/material_ui.dart';
 
 import 'acd_motion_effect.dart';
 
@@ -20,7 +22,11 @@ final class ACDStaggerOptions {
     ),
     this.exitEffect,
     this.reverseOnExit = true,
-  });
+    this.maxStaggeredItems = 20,
+  }) : assert(
+         maxStaggeredItems == null || maxStaggeredItems > 0,
+         'maxStaggeredItems must be null or at least 1',
+       );
 
   /// Delay added per successive item on top of [startDelay].
   final Duration interval;
@@ -46,6 +52,12 @@ final class ACDStaggerOptions {
   /// order they entered.
   final bool reverseOnExit;
 
+  /// Caps how many successive items get their own stagger slot. Items past
+  /// the cap share the last slot, so long (lazily built) lists don't make
+  /// item 200 wait 200 × [interval] before appearing when scrolled into
+  /// view. `null` removes the cap.
+  final int? maxStaggeredItems;
+
   /// Returns a copy with the given fields replaced.
   ACDStaggerOptions copyWith({
     Duration? interval,
@@ -55,6 +67,7 @@ final class ACDStaggerOptions {
     ACDMotionEffect? effect,
     ACDMotionEffect? exitEffect,
     bool? reverseOnExit,
+    int? maxStaggeredItems,
   }) {
     return ACDStaggerOptions(
       interval: interval ?? this.interval,
@@ -64,6 +77,7 @@ final class ACDStaggerOptions {
       effect: effect ?? this.effect,
       exitEffect: exitEffect ?? this.exitEffect,
       reverseOnExit: reverseOnExit ?? this.reverseOnExit,
+      maxStaggeredItems: maxStaggeredItems ?? this.maxStaggeredItems,
     );
   }
 
@@ -73,6 +87,12 @@ final class ACDStaggerOptions {
     final int effectiveIndex = (!visible && reverseOnExit)
         ? itemCount - 1 - index
         : index;
-    return startDelay + interval * effectiveIndex;
+    final int? cap = maxStaggeredItems == null
+        ? null
+        : math.max(1, maxStaggeredItems!);
+    final int slot = cap == null || effectiveIndex < cap
+        ? effectiveIndex
+        : cap - 1;
+    return startDelay + interval * (slot < 0 ? 0 : slot);
   }
 }

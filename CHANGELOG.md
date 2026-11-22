@@ -1,3 +1,154 @@
+## 2.0.0
+
+### ⚠️ Breaking changes
+**Flutter 3.50 and `material_ui`.**
+- Flutter 3.50 deprecates `package:flutter/material.dart`, so the package now uses the standalone [`material_ui`](https://pub.dev/packages/material_ui) package (`^1.11.1`).
+- Minimum versions are now Flutter `3.50.0` and Dart `3.14.0`.
+- Material types in the API (`ThemeData`, `InputDecoration`, `Icons`, …) now come from `package:material_ui`.
+- **To migrate:**
+  1. Add `material_ui` to your `pubspec.yaml`.
+  2. Run `dart fix --apply --code=migrate_design_widgets`.
+  3. If a dependency hasn't migrated yet, wrap your app with `MaterialUiCompatibilityBridge`.
+- To stay on Flutter < 3.50, pin `awesome_custom_dialog: ^1.6.0`.
+
+**Default looks that changed on purpose:**
+- **Bigger tap targets: 48 dp on Material, 44 pt on iOS.** This covers the toast and snackbar close buttons, the dropdown clear button, `ACDSwitch`, `ACDRatingBar`, and tappable stepper markers. The drawn glyphs keep their size.
+- **The warning colour passes WCAG AA.** `ACDContentType.warning` is now `#B45309` (it was `#FCA652`), and the Material `warning()` icon uses the contrast-safe token.
+- **`ACDMultiDropdownField` shows removable chips.** Extra selections collapse into a "+N" chip. `chipBuilder` customises the chips; `displayMode: ACDMultiDisplay.text` restores the old comma-joined text.
+- **Material dark mode uses theme surfaces.** The dialog card, list rows and popups use `surfaceContainerHigh`; their text uses `onSurface`. Light mode is unchanged.
+
+**Behaviour changes:**
+- `ACDSlideAction` confirms once. Re-arm it with `controller.reset()` or `autoResetAfter`.
+- After `onBarrierTap`, the dialog closes like a back press, so `canPop: false` keeps it open.
+- A dialog with `autoDismissAfter: Duration.zero` now stays open (as toasts already did) instead of closing at once.
+- `dragToDismiss` toasts can also be swiped off their top or bottom edge, and snackbars can be swiped away sideways.
+- Built-in texts (preset titles, OK/Cancel, search hint, errors) now come from `ACDStrings`. The autocompletes no longer show raw exception text.
+
+**API adjustments:**
+- **Now nullable, so `null` means "design default":**
+  - `ACDDialog.backgroundColor`;
+  - the various `tileColor`s;
+  - `ACDDropdownField.clearIcon`;
+  - `ACDRatingBar` icons;
+  - the dropdown and searchable list `confirmText`/`cancelText`.
+- **Deprecated:**
+  - `ACDStepper.steppingEnabled` (it never did anything);
+  - `ACDToastController.requestDismiss(auto:)` (use `reason:`).
+- `ACDToastCard.onDismissRequested` now also receives a `reason`.
+
+### ✨ New
+- **Material, Cupertino or adaptive, for every widget.**
+  - Every widget takes `design:`, and `ACDDesignScope` sets the app-wide default. When nothing is set, everything renders as Material.
+  - Cupertino variants are built in: blurred alerts, iOS actions, list rows, HUD toasts, the picker and action sheet, activity indicators, and more.
+  - The widgets also work inside a plain `CupertinoApp`.
+  - New: `ACDDesignTokens` (theme- and dark-mode-aware colours) and `ACDStrings` (every built-in text, localizable).
+- **Dialogs:**
+  - **`actions([ACDAction(...)])`:** role-based buttons (primary, destructive, cancel).
+  - **Results:** `showForResult<T>()` returns the chosen value, and `showAndWait()` completes when the dialog closes.
+  - **`ACDDialog.bottomSheet()`:** a sheet with a grab handle; drag it down to close.
+  - **`ACDDialog.loading(future:)`:** a progress dialog that returns the result. It supports `showAfter`, `minDisplay` and Cancel.
+  - **Android predictive back:** the dialog follows the swipe. `canPop` and `onPopInvoked` can veto closing.
+- **Toasts:**
+  - `ACDDialog.promiseToast`: loading turns into success or error in place.
+  - `ACDDialog.undoToast`: completes with whether the user tapped Undo.
+  - `ACDToastController.update(...)` changes a toast while it's showing.
+  - `closed` completes with the dismiss reason.
+  - `showLoadingIndicator` shows a spinner in place of the icon.
+- **Forms & input:**
+  - Form-field wrappers: `ACDSwitchFormField`, `ACDRatingFormField` and `ACDAutocompleteFormField`.
+  - `ACDPinController` adds `clear()`, `setCode()`, `focus()` and `isComplete`.
+  - `ACDResendCountdown` is the "Resend code (0:28)" button for one-time-code screens.
+  - `ACDPinField` shakes on error (`errorAnimation`, `clearOnError`).
+- **Dropdown & searchable list:**
+  - new modes: `ACDDropdownMode.actionSheet`, `.picker` and `.adaptive`;
+  - an anchored, focus-trapping menu popover;
+  - section headers (`groupBy`) and a "Select all" row (`showSelectAll`);
+  - a selection limit (`maxSelection`) and per-query caching of `onFind` results (`cacheResults`);
+  - a "Create" row when nothing matches (`onCreate`).
+- **Autocomplete:**
+  - multi-character triggers;
+  - `popupAnchor: ACDPopupAnchor.caret`;
+  - keyboard navigation and `highlightMatches`;
+  - `minCharsForSuggestions: 0` opens suggestions on focus.
+- **Loaders:** `indeterminate: true`, and `style: ACDLoaderStyle.wavy` for the Material 3 Expressive wave.
+- **Controls:**
+  - the switch and slide action follow your finger frame by frame, settle with a spring, and decide on a quick flick;
+  - new `semanticLabel` on `ACDSwitch` and `ACDRatingBar`.
+
+### ♿ Accessibility
+- **Screen readers:**
+  - the switch, rating bar, loaders, stepper markers, PIN field (one labelled field), slide action and animated text all announce properly;
+  - toasts are announced once (and explicitly on iOS);
+  - toasts with buttons stay up while TalkBack/VoiceOver is on;
+  - dialogs are named routes.
+- **Keyboard:**
+  - Tab/Space/Enter on the switch, dropdown, slide action and stepper;
+  - arrow keys on the rating bar;
+  - arrow keys/Enter/Esc in autocomplete.
+- **Reduce motion:** presets and slides become fades, motion jumps to its end state, and looping effects stop.
+- **Layout:**
+  - dialogs stay above the keyboard;
+  - button rows wrap at large text sizes;
+  - long snackbar titles ellipsize.
+
+### ⚡ Performance
+- **One lookup per build:** design and theme are resolved once per build, never per row.
+- **Repaint isolation:** endless animations sit in their own `RepaintBoundary`s.
+- **Shared stagger clock:** staggered lists and grids use one clock, with delays capped by `maxStaggeredItems`.
+- **No more listener leaks:** fixed in the switch, slide action, loaders and preset transitions.
+- **Fewer wasted rebuilds:**
+  - the PIN cursor, toast hover and rating previews no longer rebuild needlessly;
+  - a multi-segment loader no longer replays on unrelated rebuilds;
+  - `ACDDottedDecoration`, `ACDDashedBorder` and `ACDStrings` compare by value.
+
+### 🐛 Fixes
+- **Hangs and crashes:**
+  - In release builds, a negative or tiny dash pattern, a negative `stripeWidth`, or a wavy loader in an unbounded width no longer freezes the app.
+  - These no longer throw:
+    - motion sequences whose `children` shrink;
+    - the rating bar with `minRating > maxRating` or a precision of 0;
+    - a slide action inside a `Row`;
+    - a toast reusing an `id`;
+    - a dialog shown from an unmounted context.
+- **Dialogs & queue:**
+  - `dismiss()` closes this dialog's own route, even right after `show()`.
+  - Each showing is tracked separately:
+    - an old showing can't affect a newer one or complete its `showForResult`;
+    - calling `show()` twice keeps one copy;
+    - `autoDismissAfter` timers are cancelled.
+  - `dismissCallBack` may call `setState`.
+  - `show(x, y)` no longer changes `gravity`.
+  - The queue skips dialogs that can't show, no longer stalls after toasts, and `clearQueue()` is safe while a dialog is showing.
+- **Toasts:**
+  - Each overlay gets its own stack, so a toast under a new `Overlay` now shows.
+  - Throwing callbacks no longer leave a toast stuck.
+  - `showDelay`, `dedupeById`, reused ids and `maxVisible: 0` are handled.
+  - `blockBackgroundInteraction` works.
+  - The exit animation no longer replaces the entrance.
+- **Fields & lists:**
+  - **Searchable list:** drops stale results, ignores caret-only changes, commits multi-select without a confirm button, and keeps paging and retries failed pages.
+  - **Autocompletes:** no stale results or reopen-on-caret.
+  - **Dropdown:** adaptive/sheet modes open as sheets; the menu popup works in RTL.
+- **Controls:**
+  - **PIN field:**
+    - `Form.reset()` clears it;
+    - shrinking `length` trims the text;
+    - `inputFormatters` run before the length limit;
+    - pasted codes with separators are accepted.
+  - **Slide action:** dual direction and RTL wave fixed.
+  - **Switch:** follows a swapped controller.
+  - **Rating bar:** hit-tests each star's real position.
+  - **Stepper:** connectors line up with `below` titles.
+  - **Haptics:** the haptics switch is honoured everywhere.
+- **Motion:**
+  - `ACDAnimatedText` staggers on the first play and runs in reading order under RTL.
+  - `ACDDashedLine` draws inside its box.
+
+### 🧹 Maintenance
+- `flutter_lints` `^6.0.0`, plus `strict-casts`/`strict-raw-types`.
+- `.pubignore` keeps build output and editor files out of the package, and the pubspec description is under 180 characters.
+- The example app now has one screen per widget, and uses `google_fonts` 9, AGP 9.3.1, Kotlin 2.4.20 and Gradle 9.5.0.
+
 ## 1.6.0
 
 ### ✨ New Features

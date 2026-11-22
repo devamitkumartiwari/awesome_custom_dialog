@@ -1,5 +1,10 @@
 import 'dart:ui';
 
+/// The smallest total dash+gap length [acdDashPath] draws. Below this the
+/// pattern is visually indistinguishable from noise and would produce an
+/// enormous number of segments, so nothing is drawn instead.
+const double kMinDashPatternLength = 0.5;
+
 /// Walks [source]'s path metrics and returns the dashed version implied by
 /// [pattern] — an alternating dash-length/gap-length list (must be
 /// non-empty, even in length, and every entry positive), repeated for the
@@ -17,11 +22,29 @@ Path acdDashPath(
 }) {
   assert(pattern.isNotEmpty, 'pattern must not be empty');
   assert(pattern.length.isEven, 'pattern must have an even length');
-  assert(pattern.every((d) => d > 0), 'pattern entries must be positive');
+  assert(
+    pattern.every((d) => d.isFinite && d >= 0),
+    'pattern entries must be finite and non-negative',
+  );
+  assert(
+    pattern.fold(0.0, (a, b) => a + b) > 0,
+    'pattern must have a positive total length',
+  );
 
   final Path dest = Path();
+  // Release-mode guard: the asserts above vanish in release builds, and a
+  // negative/NaN entry or a near-zero total would make the loops below spin
+  // forever (or build millions of sub-pixel segments) on the UI thread.
+  if (pattern.isEmpty ||
+      pattern.length.isOdd ||
+      pattern.any((d) => !d.isFinite || d < 0)) {
+    return dest;
+  }
+  final double total = pattern.fold(0.0, (a, b) => a + b);
+  if (total < kMinDashPatternLength) return dest;
+
   for (final PathMetric metric in source.computeMetrics()) {
-    double distance = phase % pattern.reduce((a, b) => a + b);
+    double distance = phase.isFinite ? phase % total : 0.0;
     int patternIndex = 0;
     // Fast-forward the starting pattern index/offset for a non-zero phase.
     while (distance >= pattern[patternIndex]) {

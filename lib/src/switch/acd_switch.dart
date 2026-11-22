@@ -1,7 +1,14 @@
 import 'dart:async' show unawaited;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../design/acd_design.dart';
+import '../design/acd_design_scope.dart';
+import '../design/acd_design_tokens.dart';
+import '../design/acd_strings.dart';
+import '../design/internal/acd_adaptive_widgets.dart';
+import '../design/internal/acd_physics.dart';
+import '../design/internal/acd_platform_support.dart';
 import 'acd_state_fill.dart';
 import 'acd_switch_shape.dart';
 
@@ -97,6 +104,8 @@ class ACDSwitch extends StatefulWidget {
     this.imageFit = BoxFit.contain,
     this.animationDuration = const Duration(milliseconds: 200),
     this.animationCurve = Curves.easeOut,
+    this.design,
+    this.semanticLabel,
   });
 
   /// A ready-made Material-style preset — no styling required.
@@ -174,6 +183,16 @@ class ACDSwitch extends StatefulWidget {
   /// Enables native-style swipe-to-toggle. A plain tap always toggles
   /// regardless of this flag.
   final bool dragEnabled;
+
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign]. With no
+  /// explicit colors, Cupertino uses the iOS palette (system green when on,
+  /// system fill when off) and adds a selection haptic on toggle.
+  final ACDDesign? design;
+
+  /// What this control is for, read by screen readers before its value
+  /// (e.g. "Notifications", "Rate this app"). Without it, only the value
+  /// is announced.
+  final String? semanticLabel;
 
   /// Opacity applied to the whole switch when [enabled] is `false`.
   final double disabledOpacity;
@@ -373,11 +392,13 @@ class ACDSwitch extends StatefulWidget {
 
 class _ACDSwitchState extends State<ACDSwitch>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _animController;
+  /// The thumb position itself (0 = off, 1 = on). Drags write it directly,
+  /// taps animate it, releases spring it — and only the [AnimatedBuilder]
+  /// subtree repaints, never this State's whole build.
+  late final AnimationController _progress;
   late bool _internalValue = widget.value ?? widget.initialValue;
-  late double _thumbProgress = _effectiveValue ? 1.0 : 0.0;
   bool _dragging = false;
-  double _dragProgress = 0;
+  bool _focused = false;
 
   bool get _effectiveValue =>
       widget.controller?.value ?? widget.value ?? _internalValue;
@@ -396,9 +417,10 @@ class _ACDSwitchState extends State<ACDSwitch>
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
+    _progress = AnimationController(
       vsync: this,
       duration: widget.animationDuration,
+      value: _effectiveValue ? 1.0 : 0.0,
     );
     widget.controller?.addListener(_onControllerChanged);
   }
@@ -409,6 +431,8 @@ class _ACDSwitchState extends State<ACDSwitch>
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller?.removeListener(_onControllerChanged);
       widget.controller?.addListener(_onControllerChanged);
+      // The new controller may hold a different value: follow it.
+      if (!_dragging) unawaited(_animateTo(_effectiveValue ? 1.0 : 0.0));
     }
     if (widget.controller == null &&
         widget.value != null &&
@@ -421,53 +445,76 @@ class _ACDSwitchState extends State<ACDSwitch>
   @override
   void dispose() {
     widget.controller?.removeListener(_onControllerChanged);
-    _animController.dispose();
+    _progress.dispose();
     super.dispose();
   }
 
+  /// Set while [_commit] writes the controller after a fling, so the
+  /// listener doesn't replace the fling's spring with a curved tween.
+  bool _committingFling = false;
+
   void _onControllerChanged() {
-    if (!_dragging) {
+    if (!_dragging && !_committingFling) {
       unawaited(_animateTo(_effectiveValue ? 1.0 : 0.0));
     }
   }
 
+  /// Animates to [target] with the caller's curve/duration (taps,
+  /// programmatic changes) — instant under reduce motion.
   Future<void> _animateTo(double target) async {
-    if (!mounted) return;
-    final double begin = _thumbProgress;
-    if (begin == target) return;
-    _animController
-      ..duration = widget.animationDuration
-      ..value = 0;
-    final Animation<double> anim = Tween<double>(begin: begin, end: target)
-        .animate(
-          CurvedAnimation(
-            parent: _animController,
-            curve: widget.animationCurve,
-          ),
-        );
-    void listener() {
-      if (mounted) setState(() => _thumbProgress = anim.value);
+    if (!mounted || _progress.value == target) return;
+    if (acdReduceMotion(context)) {
+      _progress.value = target;
+      return;
     }
-
-    anim.addListener(listener);
-    await _animController.forward();
-    anim.removeListener(listener);
+    try {
+      await _progress
+          .animateTo(
+            target,
+            duration: widget.animationDuration,
+            curve: widget.animationCurve,
+          )
+          .orCancel;
+    } on TickerCanceled {
+      // Superseded by a newer run, a drag, or dispose.
+    }
   }
 
-  void _commit(bool newValue) {
+  /// Commits [newValue]. A drag release passes its fling [velocity]
+  /// (progress/s), which springs the thumb home instead of a curved tween.
+  void _commit(bool newValue, {double? velocity}) {
     final bool changed = newValue != _effectiveValue;
     if (widget.controller != null) {
-      widget.controller!.value = newValue;
+      if (velocity != null) {
+        _committingFling = true;
+        try {
+          widget.controller!.value = newValue;
+        } finally {
+          _committingFling = false;
+        }
+        _settle(newValue ? 1.0 : 0.0, velocity);
+      } else {
+        widget.controller!.value = newValue;
+      }
     } else if (widget.value == null) {
       setState(() => _internalValue = newValue);
-      unawaited(_animateTo(newValue ? 1.0 : 0.0));
+      if (velocity != null) {
+        _settle(newValue ? 1.0 : 0.0, velocity);
+      } else {
+        unawaited(_animateTo(newValue ? 1.0 : 0.0));
+      }
     } else {
       // Fully controlled without a separate controller: don't fight the
       // parent — snap back to the last committed value and wait for
       // `didUpdateWidget` to animate once the parent supplies a new `value`.
       unawaited(_animateTo(_effectiveValue ? 1.0 : 0.0));
     }
-    if (changed) widget.onChanged?.call(newValue);
+    if (changed) {
+      if (ACDDesign.resolve(context, widget.design).isCupertino) {
+        ACDHaptics.selection(context);
+      }
+      widget.onChanged?.call(newValue);
+    }
   }
 
   void _onTap() {
@@ -475,27 +522,43 @@ class _ACDSwitchState extends State<ACDSwitch>
     _commit(!_effectiveValue);
   }
 
+  void _settle(double target, double velocity) {
+    unawaited(
+      acdSettle(
+        _progress,
+        target: target,
+        velocity: velocity,
+        reduceMotion: acdReduceMotion(context),
+      ),
+    );
+  }
+
+  bool get _rtl => Directionality.of(context) == TextDirection.rtl;
+
   void _onHorizontalDragStart(DragStartDetails details) {
     if (!_interactive || !widget.dragEnabled) return;
-    _animController.stop();
-    setState(() {
-      _dragging = true;
-      _dragProgress = _effectiveValue ? 1.0 : 0.0;
-    });
+    _progress.stop();
+    _dragging = true;
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails details) {
     if (!_dragging) return;
     double delta = details.delta.dx / _travelExtent;
-    if (Directionality.of(context) == TextDirection.rtl) delta = -delta;
-    setState(() => _dragProgress = (_dragProgress + delta).clamp(0.0, 1.0));
+    if (_rtl) delta = -delta;
+    // No setState: the AnimatedBuilder repaints from the controller.
+    _progress.value = (_progress.value + delta).clamp(0.0, 1.0);
   }
 
   void _onHorizontalDragEnd(DragEndDetails details) {
     if (!_dragging) return;
-    final bool newValue = _dragProgress >= 0.5;
-    setState(() => _dragging = false);
-    _commit(newValue);
+    _dragging = false;
+    double velocity = (details.primaryVelocity ?? 0) / _travelExtent;
+    if (_rtl) velocity = -velocity;
+    // A deliberate flick (> 1 track/s) wins over the halfway rule.
+    final bool newValue = velocity.abs() > 1.0
+        ? velocity > 0
+        : _progress.value >= 0.5;
+    _commit(newValue, velocity: velocity);
   }
 
   Color _resolveTrackColor(BuildContext context, {required bool active}) {
@@ -508,6 +571,12 @@ class _ACDSwitchState extends State<ACDSwitch>
       disabledColor: widget.disabledColor,
     );
     if (fill.color != null) return fill.color!;
+    final ACDResolvedDesign design = ACDDesign.resolve(context, widget.design);
+    if (design.isCupertino) {
+      // iOS UISwitch palette (disabled state is shown via disabledOpacity).
+      final ACDDesignTokens tokens = ACDDesignTokens.of(context, design);
+      return active ? tokens.success : tokens.track;
+    }
     final ColorScheme scheme = Theme.of(context).colorScheme;
     if (!widget.enabled) return scheme.onSurface.withValues(alpha: 0.12);
     return active ? scheme.primary : scheme.surfaceContainerHighest;
@@ -672,11 +741,9 @@ class _ACDSwitchState extends State<ACDSwitch>
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final bool active = _effectiveValue;
-    final double progress = _dragging ? _dragProgress : _thumbProgress;
-
+  /// Everything that moves with the thumb — rebuilt by the AnimatedBuilder
+  /// per frame, while the semantics/focus/gesture shell above stays put.
+  Widget _buildStack(BuildContext context, double progress, bool active) {
     final BorderRadius trackRadius = widget.shape == ACDSwitchShape.pill
         ? BorderRadius.circular(widget.height / 2)
         : (widget.borderRadius ?? BorderRadius.circular(8));
@@ -716,11 +783,7 @@ class _ACDSwitchState extends State<ACDSwitch>
         ? widget.activeImage
         : widget.inactiveImage;
     final Widget? content = _buildContent();
-    final MouseCursor cursor =
-        widget.mouseCursor ??
-        (widget.enabled ? SystemMouseCursors.click : SystemMouseCursors.basic);
-
-    final Widget stack = Stack(
+    return Stack(
       children: [
         Positioned.fill(child: track),
         if (image != null)
@@ -749,27 +812,79 @@ class _ACDSwitchState extends State<ACDSwitch>
         ),
       ],
     );
+  }
 
-    return Opacity(
-      opacity: widget.enabled ? 1.0 : widget.disabledOpacity,
-      child: MouseRegion(
-        cursor: cursor,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _interactive ? _onTap : null,
-          onHorizontalDragStart: (_interactive && widget.dragEnabled)
-              ? _onHorizontalDragStart
-              : null,
-          onHorizontalDragUpdate: (_interactive && widget.dragEnabled)
-              ? _onHorizontalDragUpdate
-              : null,
-          onHorizontalDragEnd: (_interactive && widget.dragEnabled)
-              ? _onHorizontalDragEnd
-              : null,
-          child: SizedBox(
-            width: widget.width,
-            height: widget.height,
-            child: stack,
+  @override
+  Widget build(BuildContext context) {
+    final bool active = _effectiveValue;
+    final BorderRadius trackRadius = widget.shape == ACDSwitchShape.pill
+        ? BorderRadius.circular(widget.height / 2)
+        : (widget.borderRadius ?? BorderRadius.circular(8));
+    final MouseCursor cursor =
+        widget.mouseCursor ??
+        (widget.enabled ? SystemMouseCursors.click : SystemMouseCursors.basic);
+
+    final Widget stack = AnimatedBuilder(
+      animation: _progress,
+      builder: (context, _) => _buildStack(context, _progress.value, active),
+    );
+
+    final ACDStrings strings = ACDDesignScope.stringsOf(context);
+    // Screen readers: a real switch (toggled state + activate action).
+    // Keyboard: focusable, Space/Enter toggles, with a visible focus ring.
+    return Semantics(
+      label: widget.semanticLabel,
+      toggled: active,
+      enabled: widget.enabled,
+      value: active ? strings.on : strings.off,
+      onTap: _interactive ? _onTap : null,
+      child: FocusableActionDetector(
+        enabled: _interactive,
+        mouseCursor: cursor,
+        onShowFocusHighlight: (bool v) => setState(() => _focused = v),
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              _onTap();
+              return null;
+            },
+          ),
+        },
+        child: Opacity(
+          opacity: widget.enabled ? 1.0 : widget.disabledOpacity,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _interactive ? _onTap : null,
+            onHorizontalDragStart: (_interactive && widget.dragEnabled)
+                ? _onHorizontalDragStart
+                : null,
+            onHorizontalDragUpdate: (_interactive && widget.dragEnabled)
+                ? _onHorizontalDragUpdate
+                : null,
+            onHorizontalDragEnd: (_interactive && widget.dragEnabled)
+                ? _onHorizontalDragEnd
+                : null,
+            // 48 dp / 44 pt touch area like the framework's padded Switch;
+            // the track itself keeps its size, centred.
+            child: ACDTapTargetBox(
+              design: ACDDesign.resolve(context, widget.design),
+              child: Container(
+                width: widget.width,
+                height: widget.height,
+                foregroundDecoration: _focused
+                    ? BoxDecoration(
+                        borderRadius: trackRadius,
+                        border: Border.all(
+                          color: Theme.of(context).focusColor
+                              .withValues(alpha: 1),
+                          width: 2,
+                          strokeAlign: BorderSide.strokeAlignOutside,
+                        ),
+                      )
+                    : null,
+                child: stack,
+              ),
+            ),
           ),
         ),
       ),

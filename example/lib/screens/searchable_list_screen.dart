@@ -1,5 +1,5 @@
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../widgets/showcase_widgets.dart';
 
@@ -88,6 +88,12 @@ class SearchableListScreen extends StatelessWidget {
             Icons.cloud_sync,
             () => _showAsyncSearch(context),
           ),
+          listItem(
+            'Long lists',
+            'Groups, select all, max 3, create a missing item',
+            Icons.view_list_outlined,
+            () => _showLongList(context),
+          ),
         ]),
         const CodeSnippet(
           code: '''
@@ -101,6 +107,21 @@ ACDDialog().build(context)
         ),
       ],
     );
+  }
+
+  void _showLongList(BuildContext ctx) {
+    ACDDialog().build(ctx)
+      ..borderRadius = 20
+      ..height = 480
+      ..multiSearchableList<String>(
+        items: _countries,
+        groupBy: (c) => c[0],
+        showSelectAll: true,
+        maxSelection: 3,
+        onCreate: (query) async => query, // e.g. save, then return it
+        onMultipleItemsChange: (picked) => debugPrint('Picked $picked'),
+      )
+      ..show();
   }
 
   void _showLocalStringFilter(BuildContext ctx) {

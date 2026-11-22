@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../design/acd_design.dart';
 
 import '../core/acd_animation.dart';
 import '../core/acd_content_type.dart';
@@ -37,6 +39,7 @@ final class ACDToastConfig {
     this.icon,
     this.showIcon,
     this.animatedIcon,
+    this.showLoadingIndicator,
     this.backgroundColor,
     this.textColor,
     this.backgroundGradient,
@@ -84,6 +87,7 @@ final class ACDToastConfig {
     this.onAutoDismiss,
     this.onShown,
     this.onDismissed,
+    this.design,
   });
 
   // ── Content ──────────────────────────────────────────────────────────────
@@ -113,6 +117,10 @@ final class ACDToastConfig {
   /// Wraps the icon in a subtle repeating scale pulse. Falls back to
   /// `false`.
   final bool? animatedIcon;
+
+  /// Shows a small activity indicator in place of the icon — the "working"
+  /// state of a promise toast. Falls back to `false`.
+  final bool? showLoadingIndicator;
 
   // ── Colors / shape ───────────────────────────────────────────────────────
   /// Base fill/border color (exact resolution depends on [style]). Falls
@@ -253,12 +261,14 @@ final class ACDToastConfig {
   final bool? progressBarAtTop;
 
   /// Pauses the auto-dismiss timer (and progress bar) while the pointer
-  /// hovers the toast — a no-op on touch-only platforms, where no hover
-  /// event ever fires. Falls back to `false`.
+  /// hovers the toast, or while a finger is held on it on touch screens.
+  /// Falls back to `false`.
   final bool? pauseOnHover;
 
   // ── Interaction ──────────────────────────────────────────────────────────
-  /// Lets the user swipe the toast away. Falls back to `false`.
+  /// Lets the user swipe the toast away — sideways, and also off its own
+  /// edge for top (swipe up) and bottom (swipe down) toasts. Falls back to
+  /// `false`.
   final bool? dragToDismiss;
 
   /// Dismisses the toast when tapped anywhere on its body. Falls back to
@@ -305,6 +315,10 @@ final class ACDToastConfig {
   /// Called once this toast has finished disappearing, for any reason.
   final VoidCallback? onDismissed;
 
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign]. Cupertino
+  /// with no colors set renders an iOS-style translucent pill.
+  final ACDDesign? design;
+
   /// Literal, backward-compatible defaults — matches the values
   /// `ACDDialog.toast()` used before this config existed, so a call site
   /// that sets none of the new parameters resolves to exactly the same
@@ -314,6 +328,7 @@ final class ACDToastConfig {
     style: ACDToastStyle.filled,
     showIcon: true,
     animatedIcon: false,
+    showLoadingIndicator: false,
     backgroundColor: Color(0xDD000000),
     textColor: Colors.white,
     borderWidth: 1.0,
@@ -350,6 +365,7 @@ final class ACDToastConfig {
     IconData? icon,
     bool? showIcon,
     bool? animatedIcon,
+    bool? showLoadingIndicator,
     Color? backgroundColor,
     Color? textColor,
     Gradient? backgroundGradient,
@@ -397,6 +413,7 @@ final class ACDToastConfig {
     VoidCallback? onAutoDismiss,
     VoidCallback? onShown,
     VoidCallback? onDismissed,
+    ACDDesign? design,
   }) {
     return ACDToastConfig(
       message: message ?? this.message,
@@ -407,6 +424,7 @@ final class ACDToastConfig {
       icon: icon ?? this.icon,
       showIcon: showIcon ?? this.showIcon,
       animatedIcon: animatedIcon ?? this.animatedIcon,
+      showLoadingIndicator: showLoadingIndicator ?? this.showLoadingIndicator,
       backgroundColor: backgroundColor ?? this.backgroundColor,
       textColor: textColor ?? this.textColor,
       backgroundGradient: backgroundGradient ?? this.backgroundGradient,
@@ -455,6 +473,7 @@ final class ACDToastConfig {
       onAutoDismiss: onAutoDismiss ?? this.onAutoDismiss,
       onShown: onShown ?? this.onShown,
       onDismissed: onDismissed ?? this.onDismissed,
+      design: design ?? this.design,
     );
   }
 
@@ -474,6 +493,8 @@ final class ACDToastConfig {
       icon: overlay.icon ?? base.icon,
       showIcon: overlay.showIcon ?? base.showIcon,
       animatedIcon: overlay.animatedIcon ?? base.animatedIcon,
+      showLoadingIndicator:
+          overlay.showLoadingIndicator ?? base.showLoadingIndicator,
       backgroundColor: overlay.backgroundColor ?? base.backgroundColor,
       textColor: overlay.textColor ?? base.textColor,
       backgroundGradient: overlay.backgroundGradient ?? base.backgroundGradient,
@@ -522,6 +543,7 @@ final class ACDToastConfig {
       onAutoDismiss: overlay.onAutoDismiss ?? base.onAutoDismiss,
       onShown: overlay.onShown ?? base.onShown,
       onDismissed: overlay.onDismissed ?? base.onDismissed,
+      design: overlay.design ?? base.design,
     );
   }
 
@@ -537,6 +559,7 @@ final class ACDToastConfig {
           icon == other.icon &&
           showIcon == other.showIcon &&
           animatedIcon == other.animatedIcon &&
+          showLoadingIndicator == other.showLoadingIndicator &&
           backgroundColor == other.backgroundColor &&
           textColor == other.textColor &&
           backgroundGradient == other.backgroundGradient &&
@@ -583,7 +606,8 @@ final class ACDToastConfig {
           onCloseButtonTap == other.onCloseButtonTap &&
           onAutoDismiss == other.onAutoDismiss &&
           onShown == other.onShown &&
-          onDismissed == other.onDismissed);
+          onDismissed == other.onDismissed &&
+          design == other.design);
 
   @override
   int get hashCode => Object.hash(
@@ -591,6 +615,7 @@ final class ACDToastConfig {
     Object.hash(
       showIcon,
       animatedIcon,
+      showLoadingIndicator,
       backgroundColor,
       textColor,
       backgroundGradient,
@@ -634,6 +659,13 @@ final class ACDToastConfig {
       actions,
       customBuilder,
     ),
-    Object.hash(onTap, onCloseButtonTap, onAutoDismiss, onShown, onDismissed),
+    Object.hash(
+      onTap,
+      onCloseButtonTap,
+      onAutoDismiss,
+      onShown,
+      onDismissed,
+      design,
+    ),
   );
 }

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// An optional root-level wrapper that gives toasts a dedicated `Overlay`
 /// independent of the app's own navigation stack. Install it once via

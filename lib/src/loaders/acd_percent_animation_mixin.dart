@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Internal to the package: shared animation lifecycle for every percent
 /// loader in this folder ([ACDLinearPercentIndicator],
@@ -21,7 +21,21 @@ mixin ACDPercentAnimationMixin<T extends StatefulWidget>
   /// The most recently animated value, read by the painter/build method.
   double currentAnimatedPercent = 0;
 
+  CurvedAnimation? _curved;
   Animation<double>? _animation;
+  VoidCallback? _listener;
+
+  /// Detaches the in-flight run's listener and disposes its
+  /// [CurvedAnimation]. Required because retargeting `stop()`s the
+  /// controller, which cancels the previous `forward()` — whose plain future
+  /// then never completes, so cleanup placed after `await` would never run.
+  void _detachPercentAnimation() {
+    if (_listener != null) _animation?.removeListener(_listener!);
+    _curved?.dispose();
+    _curved = null;
+    _animation = null;
+    _listener = null;
+  }
 
   /// Seeds [currentAnimatedPercent] without animating — call once from
   /// `initState`.
@@ -46,7 +60,9 @@ mixin ACDPercentAnimationMixin<T extends StatefulWidget>
     final double begin = currentAnimatedPercent;
     if (begin == clampedTarget) return;
 
+    _detachPercentAnimation();
     if (!animate || duration == Duration.zero) {
+      _percentAnimController?.stop();
       setState(() => currentAnimatedPercent = clampedTarget);
       onTick?.call(currentAnimatedPercent);
       return;
@@ -56,28 +72,36 @@ mixin ACDPercentAnimationMixin<T extends StatefulWidget>
       ..stop()
       ..duration = duration
       ..value = 0;
+    final CurvedAnimation curved = CurvedAnimation(
+      parent: _controller,
+      curve: curve,
+    );
     final Animation<double> animation = Tween<double>(
       begin: begin,
       end: clampedTarget,
-    ).animate(CurvedAnimation(parent: _controller, curve: curve));
-    _animation = animation;
+    ).animate(curved);
     void listener() {
       if (mounted) setState(() => currentAnimatedPercent = animation.value);
       onTick?.call(animation.value);
     }
 
+    _curved = curved;
+    _animation = animation;
+    _listener = listener;
     animation.addListener(listener);
     try {
-      await _controller.forward();
+      await _controller.forward().orCancel;
+    } on TickerCanceled {
+      // Superseded by a newer run (or disposed) — that path cleans up.
     } finally {
-      animation.removeListener(listener);
-      if (identical(_animation, animation)) _animation = null;
+      if (identical(_animation, animation)) _detachPercentAnimation();
     }
   }
 
   /// Releases the shared [AnimationController], if one was ever created —
   /// call from `dispose`.
   void disposePercentAnimation() {
+    _detachPercentAnimation();
     _percentAnimController?.dispose();
   }
 }

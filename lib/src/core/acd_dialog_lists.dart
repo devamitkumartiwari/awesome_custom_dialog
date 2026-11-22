@@ -1,5 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../design/acd_design.dart';
+import '../design/internal/acd_adaptive_widgets.dart';
+import '../design/internal/acd_platform_support.dart';
 import '../list_tile/acd_checkbox_list_tile.dart';
 import 'acd_dialog.dart';
 import '../list_tile/acd_list_tile_item.dart';
@@ -16,7 +19,7 @@ extension ACDDialogLists on ACDDialog {
     List<ACDListTileItem>? items,
     double? height,
     EdgeInsets? padding,
-    Color tileColor = Colors.white,
+    Color? tileColor,
     bool isClickAutoDismiss = true,
     Function(int)? onClickItemListener,
     ScrollPhysics? physics,
@@ -32,51 +35,81 @@ extension ACDDialogLists on ACDDialog {
         padding: padding ?? EdgeInsets.zero,
         child: SizedBox(
           height: height,
-          child: ListView.builder(
-            padding: EdgeInsets.zero,
-            shrinkWrap: true,
-            physics: physics,
-            controller: controller,
-            itemCount: itemCount,
-            itemBuilder: (BuildContext context, int index) {
-              final Widget tile = Material(
-                color: tileColor,
-                child: ListTile(
-                  onTap: () {
+          // Design resolved once per list (not per row) when it builds.
+          child: Builder(
+            builder: (listContext) {
+              final ACDResolvedDesign design = resolveDesign(listContext);
+              return ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                physics: physics,
+                controller: controller,
+                itemCount: itemCount,
+                itemBuilder: (BuildContext context, int index) {
+                  final ACDListTileItem? item = items?[index];
+                  void onTap() {
                     onClickItemListener?.call(index);
                     if (isClickAutoDismiss) dismiss();
-                  },
-                  // BUG: defaulting to EdgeInsets.zero left icons/text flush
-                  // against the dialog edge with no breathing room — match
-                  // Flutter's own ListTile default instead.
-                  contentPadding:
-                      items?[index].padding ??
-                      const EdgeInsets.symmetric(horizontal: 16.0),
-                  leading: items?[index].leading,
-                  trailing: items?[index].trailing,
-                  shape: borderRadius == null
-                      ? null
-                      : RoundedRectangleBorder(borderRadius: borderRadius),
-                  title: Text(
-                    items?[index].text ?? '',
+                  }
+
+                  final Widget title = Text(
+                    item?.text ?? '',
                     style: TextStyle(
-                      color: items?[index].color,
-                      fontSize: items?[index].fontSize,
-                      fontWeight: items?[index].fontWeight,
-                      fontFamily: items?[index].fontFamily,
-                    ).merge(items?[index].style),
-                  ),
-                ),
-              );
-              if (stagger == null) return tile;
-              return ACDMotion(
-                key: ValueKey<int>(index),
-                delay: stagger.delayForIndex(index, itemCount, visible: true),
-                duration: stagger.itemDuration,
-                curve: stagger.curve,
-                effect: stagger.effect,
-                exitEffect: stagger.exitEffect,
-                child: tile,
+                      color: item?.color,
+                      fontSize: item?.fontSize,
+                      fontWeight: item?.fontWeight,
+                      fontFamily: item?.fontFamily,
+                    ).merge(item?.style),
+                  );
+                  final Widget tile = design.isCupertino
+                      ? ACDAdaptiveListTile(
+                          design: design,
+                          backgroundColor: tileColor,
+                          contentPadding: item?.padding,
+                          leading: item?.leading,
+                          trailing: item?.trailing,
+                          onTap: onTap,
+                          title: title,
+                        )
+                      : acdEnsureMaterial(
+                          context,
+                          Material(
+                            color: tileColor ?? acdMaterialSurface(context),
+                            child: ListTile(
+                              onTap: onTap,
+                              // BUG: defaulting to EdgeInsets.zero left
+                              // icons/text flush against the dialog edge with no
+                              // breathing room — match Flutter's own ListTile
+                              // default instead.
+                              contentPadding:
+                                  item?.padding ??
+                                  const EdgeInsets.symmetric(horizontal: 16.0),
+                              leading: item?.leading,
+                              trailing: item?.trailing,
+                              shape: borderRadius == null
+                                  ? null
+                                  : RoundedRectangleBorder(
+                                      borderRadius: borderRadius,
+                                    ),
+                              title: title,
+                            ),
+                          ),
+                        );
+                  if (stagger == null) return tile;
+                  return ACDMotion(
+                    key: ValueKey<int>(index),
+                    delay: stagger.delayForIndex(
+                      index,
+                      itemCount,
+                      visible: true,
+                    ),
+                    duration: stagger.itemDuration,
+                    curve: stagger.curve,
+                    effect: stagger.effect,
+                    exitEffect: stagger.exitEffect,
+                    child: tile,
+                  );
+                },
               );
             },
           ),
@@ -103,7 +136,7 @@ extension ACDDialogLists on ACDDialog {
     ACDStaggerOptions? stagger,
   }) {
     if (context == null) return this;
-    final size = MediaQuery.of(context!).size;
+    final size = MediaQuery.sizeOf(context!);
     return widget(
       Container(
         height: height,
@@ -113,16 +146,21 @@ extension ACDDialogLists on ACDDialog {
           minWidth: size.width * .1,
           maxHeight: size.height * .5,
         ),
-        child: ACDRadioListTile(
-          items: items,
-          initialValue: initialValue,
-          color: color,
-          activeColor: activeColor,
-          physics: physics,
-          controller: controller,
-          onChanged: onClickItemListener,
-          borderRadius: borderRadius,
-          stagger: stagger,
+        // Builder: read `design` when the dialog builds, so it applies
+        // even if set after this call in the chain.
+        child: Builder(
+          builder: (_) => ACDRadioListTile(
+            design: design,
+            items: items,
+            initialValue: initialValue,
+            color: color,
+            activeColor: activeColor,
+            physics: physics,
+            controller: controller,
+            onChanged: onClickItemListener,
+            borderRadius: borderRadius,
+            stagger: stagger,
+          ),
         ),
       ),
     );
@@ -146,7 +184,7 @@ extension ACDDialogLists on ACDDialog {
     ACDStaggerOptions? stagger,
   }) {
     if (context == null) return this;
-    final size = MediaQuery.of(context!).size;
+    final size = MediaQuery.sizeOf(context!);
     return widget(
       Container(
         height: height,
@@ -156,16 +194,19 @@ extension ACDDialogLists on ACDDialog {
           minWidth: size.width * .1,
           maxHeight: size.height * .5,
         ),
-        child: ACDCheckboxListTile(
-          items: items,
-          initialValues: initialValues,
-          color: color,
-          activeColor: activeColor,
-          physics: physics,
-          controller: controller,
-          onChanged: onChanged,
-          borderRadius: borderRadius,
-          stagger: stagger,
+        child: Builder(
+          builder: (_) => ACDCheckboxListTile(
+            design: design,
+            items: items,
+            initialValues: initialValues,
+            color: color,
+            activeColor: activeColor,
+            physics: physics,
+            controller: controller,
+            onChanged: onChanged,
+            borderRadius: borderRadius,
+            stagger: stagger,
+          ),
         ),
       ),
     );

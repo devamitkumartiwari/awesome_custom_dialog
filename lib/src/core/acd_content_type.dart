@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// The four ready-made looks for [ACDSnackbarContent] and
 /// `ACDDialog.snackbar()`.
@@ -9,7 +9,7 @@ enum ACDContentType {
   /// Red, with a close/X icon.
   failure,
 
-  /// Orange, with an exclamation icon.
+  /// Deep amber, with an exclamation icon (≥ 4.5:1 against white text).
   warning,
 
   /// Blue, with a question-mark icon.
@@ -22,7 +22,8 @@ extension ACDContentTypeX on ACDContentType {
   Color get color => switch (this) {
     ACDContentType.success => const Color(0xFF2D6A4F),
     ACDContentType.failure => const Color(0xFFC72C41),
-    ACDContentType.warning => const Color(0xFFFCA652),
+    // 2.0: was 0xFFFCA652 (white text ≈ 1.9:1, fails WCAG AA).
+    ACDContentType.warning => const Color(0xFFB45309),
     ACDContentType.help => const Color(0xFF3282B8),
   };
 

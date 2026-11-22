@@ -2,6 +2,7 @@ export 'acd_toast_card.dart';
 export 'acd_toast_close_button_mode.dart';
 export 'acd_toast_config.dart';
 export 'acd_toast_controller.dart';
+export 'acd_toast_dismiss_reason.dart';
 export 'acd_toast_layer.dart';
 export 'acd_toast_length.dart';
 export 'acd_toast_lifecycle.dart';

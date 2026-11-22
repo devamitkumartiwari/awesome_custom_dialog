@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A thin countdown bar tracking a toast's auto-dismiss timer. Purely
 /// presentational — [controller] (owned and driven by `ACDToastController`)

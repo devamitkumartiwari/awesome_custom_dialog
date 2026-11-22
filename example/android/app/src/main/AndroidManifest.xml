@@ -2,9 +2,11 @@
     <!-- google_fonts fetches font files over the network on first use. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="acd_example"
+        android:label="ACD"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:enableOnBackInvokedCallback="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round">
         <activity
             android:name=".MainActivity"
             android:exported="true"

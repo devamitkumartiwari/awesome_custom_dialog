@@ -1,8 +1,15 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../design/acd_cupertino_field_style.dart';
+import '../design/acd_design.dart';
+import '../design/acd_design_scope.dart';
+import '../design/internal/acd_adaptive_widgets.dart';
+import '../design/internal/acd_platform_support.dart';
 import '../list_tile/acd_search_state.dart';
+import 'acd_highlighted_text.dart';
 
 /// A generic, dependency-free typeahead text field.
 ///
@@ -40,7 +47,7 @@ class ACDAutocompleteField<T> extends StatefulWidget {
     this.popupElevation = 4,
     this.popupBorderRadius = const BorderRadius.all(Radius.circular(8)),
     this.popupColor,
-    this.tileColor = Colors.white,
+    this.tileColor,
     this.itemTextColor,
     this.itemFontSize,
     this.itemFontWeight,
@@ -49,7 +56,20 @@ class ACDAutocompleteField<T> extends StatefulWidget {
     this.loadingBuilder,
     this.emptyBuilder,
     this.errorBuilder,
+    this.design,
+    this.cupertinoStyle,
+    this.highlightMatches = false,
   });
+
+  /// Material (default) / Cupertino / adaptive — see [ACDDesign].
+  final ACDDesign? design;
+
+  /// Cupertino-only field styling (used when the design resolves to
+  /// Cupertino). [decoration]'s hint/prefix/suffix/error still map over.
+  final ACDCupertinoFieldStyle? cupertinoStyle;
+
+  /// Bold the part of each default suggestion row that matches the query.
+  final bool highlightMatches;
 
   /// The local dataset suggestions are filtered from, when [onFind] is not
   /// supplied.
@@ -115,8 +135,9 @@ class ACDAutocompleteField<T> extends StatefulWidget {
   /// Popup card background color.
   final Color? popupColor;
 
-  /// Background color of each suggestion tile.
-  final Color tileColor;
+  /// Background color of each suggestion tile. Defaults to white (Material)
+  /// or the popup surface (Cupertino).
+  final Color? tileColor;
 
   /// Suggestion text color.
   final Color? itemTextColor;
@@ -152,9 +173,23 @@ class _ACDAutocompleteFieldState<T> extends State<ACDAutocompleteField<T>> {
   FocusNode? _ownedFocusNode;
   Timer? _debounce;
   final LayerLink _layerLink = LayerLink();
-  OverlayEntry? _overlayEntry;
+  // The popup lives in this widget's own subtree via OverlayPortal: it
+  // rebuilds with the field (no manual markNeedsBuild), inherits the field's
+  // theme/scope, and is torn down with it.
+  final OverlayPortalController _portal = OverlayPortalController();
   ACDSearchState<T> _state = const ACDSearchIdle([]);
   int _requestId = 0;
+
+  // Last query handled — the controller also notifies on caret/selection
+  // moves, which must not reopen the popup or re-run the search.
+  String? _lastQuery;
+
+  // Keyboard-highlighted suggestion (arrow keys), or -1 for none.
+  int _highlighted = -1;
+
+  // Design resolved in build() with the field's own context, reused by the
+  // overlay (whose builder context sits under the Overlay, not this field).
+  ACDResolvedDesign _design = ACDResolvedDesign.material;
 
   TextEditingController get _controller =>
       widget.controller ?? (_ownedController ??= TextEditingController());
@@ -164,14 +199,33 @@ class _ACDAutocompleteFieldState<T> extends State<ACDAutocompleteField<T>> {
   @override
   void initState() {
     super.initState();
+    _lastQuery = _controller.text;
     _controller.addListener(_onTextChanged);
     _focusNode.addListener(_onFocusChanged);
   }
 
   @override
+  void didUpdateWidget(covariant ACDAutocompleteField<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Re-wire listeners when the caller swaps controller/focus node —
+    // otherwise the old one keeps driving this field and the new one is
+    // never listened to.
+    if (oldWidget.controller != widget.controller) {
+      (oldWidget.controller ?? _ownedController)?.removeListener(
+        _onTextChanged,
+      );
+      _lastQuery = _controller.text;
+      _controller.addListener(_onTextChanged);
+    }
+    if (oldWidget.focusNode != widget.focusNode) {
+      (oldWidget.focusNode ?? _ownedFocusNode)?.removeListener(_onFocusChanged);
+      _focusNode.addListener(_onFocusChanged);
+    }
+  }
+
+  @override
   void dispose() {
     _debounce?.cancel();
-    _removeOverlay();
     _controller.removeListener(_onTextChanged);
     _focusNode.removeListener(_onFocusChanged);
     _ownedController?.dispose();
@@ -182,7 +236,56 @@ class _ACDAutocompleteFieldState<T> extends State<ACDAutocompleteField<T>> {
   void _onFocusChanged() {
     if (!_focusNode.hasFocus) {
       _removeOverlay();
+      return;
     }
+    // minCharsForSuggestions: 0 means "suggest on focus".
+    if (widget.minCharsForSuggestions == 0 &&
+        _controller.text.isEmpty &&
+        !_portal.isShowing) {
+      _startSearch('');
+    }
+  }
+
+  List<T> get _visibleItems => switch (_state) {
+    ACDSearchIdle<T>(:final items) => items,
+    ACDSearchLoaded<T>(:final items) => items,
+    _ => <T>[],
+  };
+
+  // Arrow/Enter/Escape navigation while the popup is open. Runs before the
+  // text field's own editing shortcuts (this Focus is its ancestor).
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (!_portal.isShowing ||
+        (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+      return KeyEventResult.ignored;
+    }
+    final List<T> items = _visibleItems;
+    final LogicalKeyboardKey key = event.logicalKey;
+    if (key == LogicalKeyboardKey.escape) {
+      _removeOverlay();
+      return KeyEventResult.handled;
+    }
+    if (items.isEmpty) return KeyEventResult.ignored;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _setHighlighted((_highlighted + 1) % items.length);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _setHighlighted(_highlighted <= 0 ? items.length - 1 : _highlighted - 1);
+      return KeyEventResult.handled;
+    }
+    if ((key == LogicalKeyboardKey.enter ||
+            key == LogicalKeyboardKey.numpadEnter) &&
+        _highlighted >= 0 &&
+        _highlighted < items.length) {
+      _select(items[_highlighted]);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _setHighlighted(int index) {
+    setState(() => _highlighted = index);
   }
 
   String _asString(T item) =>
@@ -190,69 +293,86 @@ class _ACDAutocompleteFieldState<T> extends State<ACDAutocompleteField<T>> {
 
   void _onTextChanged() {
     final String query = _controller.text;
+    if (query == _lastQuery) return; // caret/selection-only change
+    _lastQuery = query;
     _debounce?.cancel();
 
     if (query.length < widget.minCharsForSuggestions) {
+      _requestId++; // a late result for the old query must not land now
       setState(() => _state = ACDSearchIdle<T>(widget.suggestions));
       _removeOverlay();
       return;
     }
+    _startSearch(query);
+  }
 
+  void _startSearch(String query) {
+    _highlighted = -1;
+    if (widget.onFind == null) {
+      // Local filtering is synchronous and cheap: no debounce, no spinner
+      // flash — results update on the same frame as the keystroke.
+      _requestId++;
+      _applyResults(query, _filterLocal(query));
+      _showOverlay();
+      return;
+    }
     _debounce = Timer(widget.searchDebounce, () => _runSearch(query));
     setState(() => _state = const ACDSearchLoading());
     _showOverlay();
   }
 
-  Future<void> _runSearch(String query) async {
-    final int requestId = ++_requestId;
-    if (widget.onFind != null) {
-      try {
-        final List<T> results = await widget.onFind!(query);
-        if (!mounted || requestId != _requestId) return;
-        setState(
-          () => _state = results.isEmpty
-              ? ACDSearchEmpty<T>(query)
-              : ACDSearchLoaded<T>(results),
-        );
-      } catch (error, stackTrace) {
-        if (!mounted || requestId != _requestId) return;
-        setState(() => _state = ACDSearchError<T>(error, query, stackTrace));
-      }
-    } else {
-      final bool Function(T, String) predicate =
-          widget.filterFn ??
-          (item, q) => _asString(item).toLowerCase().contains(q.toLowerCase());
-      final List<T> results = widget.suggestions
-          .where((item) => predicate(item, query))
-          .toList();
-      setState(
-        () => _state = results.isEmpty
-            ? ACDSearchEmpty<T>(query)
-            : ACDSearchLoaded<T>(results),
+  List<T> _filterLocal(String query) {
+    final bool Function(T, String) predicate =
+        widget.filterFn ??
+        (item, q) => _asString(item).toLowerCase().contains(q.toLowerCase());
+    return widget.suggestions.where((item) => predicate(item, query)).toList();
+  }
+
+  void _applyResults(String query, List<T> results) {
+    setState(
+      () => _state = results.isEmpty
+          ? ACDSearchEmpty<T>(query)
+          : ACDSearchLoaded<T>(results),
+    );
+    if (query.isNotEmpty) {
+      acdAnnounce(
+        context,
+        ACDDesignScope.stringsOf(context).resultsAnnouncement(results.length),
       );
     }
-    _overlayEntry?.markNeedsBuild();
+  }
+
+  Future<void> _runSearch(String query) async {
+    final int requestId = ++_requestId;
+    try {
+      final List<T> results = await widget.onFind!(query);
+      if (!mounted || requestId != _requestId) return;
+      _applyResults(query, results);
+    } catch (error, stackTrace) {
+      if (!mounted || requestId != _requestId) return;
+      setState(() => _state = ACDSearchError<T>(error, query, stackTrace));
+    }
   }
 
   void _showOverlay() {
-    if (_overlayEntry != null) {
-      _overlayEntry!.markNeedsBuild();
-      return;
-    }
-    final OverlayState? overlayState = Overlay.maybeOf(context);
-    if (overlayState == null) return;
-    _overlayEntry = OverlayEntry(builder: _buildOverlay);
-    overlayState.insert(_overlayEntry!);
+    if (!_portal.isShowing && Overlay.maybeOf(context) != null) _portal.show();
   }
 
   void _removeOverlay() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
+    if (_portal.isShowing) _portal.hide();
+    _highlighted = -1;
   }
 
   void _select(T item) {
     if (widget.submitOnSuggestionTap) {
-      _controller.text = _asString(item);
+      // Writing the picked label into the field is not a new query: mark it
+      // handled so the listener doesn't debounce a fresh search (which used
+      // to call onFind again with the selected value).
+      final String picked = _asString(item);
+      _lastQuery = picked;
+      _debounce?.cancel();
+      _requestId++; // drop any in-flight result for the old query
+      _controller.text = picked;
       widget.onSuggestionSelected?.call(item);
       widget.onSubmitted?.call(_controller.text);
       if (widget.clearOnSubmit) _controller.clear();
@@ -264,9 +384,9 @@ class _ACDAutocompleteFieldState<T> extends State<ACDAutocompleteField<T>> {
   }
 
   Widget _buildOverlay(BuildContext context) {
-    final RenderBox? anchorBox = this.context.findRenderObject() as RenderBox?;
-    final double fieldHeight =
-        anchorBox?.size.height ?? (widget.decoration.isDense == true ? 40 : 56);
+    // Last frame's layout of the field (overlay builds run after it).
+    final RenderObject? ro = this.context.findRenderObject();
+    final RenderBox? anchorBox = ro is RenderBox && ro.hasSize ? ro : null;
     final double fieldWidth = anchorBox?.size.width ?? 200;
     final double popupHeight = widget.popupHeight ?? 260;
 
@@ -275,8 +395,11 @@ class _ACDAutocompleteFieldState<T> extends State<ACDAutocompleteField<T>> {
       final Offset fieldBottomGlobal = anchorBox.localToGlobal(
         Offset(0, anchorBox.size.height),
       );
-      final double screenHeight = MediaQuery.sizeOf(context).height;
-      if (screenHeight - fieldBottomGlobal.dy < popupHeight) {
+      // Space below excludes the on-screen keyboard.
+      final double visibleBottom =
+          MediaQuery.sizeOf(context).height -
+          MediaQuery.viewInsetsOf(context).bottom;
+      if (visibleBottom - fieldBottomGlobal.dy < popupHeight) {
         flipAbove = true;
       }
     }
@@ -286,14 +409,23 @@ class _ACDAutocompleteFieldState<T> extends State<ACDAutocompleteField<T>> {
       child: CompositedTransformFollower(
         link: _layerLink,
         showWhenUnlinked: false,
-        offset: flipAbove ? Offset(0, -popupHeight) : Offset(0, fieldHeight),
-        child: Material(
-          elevation: widget.popupElevation,
-          color: widget.popupColor,
-          borderRadius: widget.popupBorderRadius,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: popupHeight),
-            child: _buildSuggestionList(context),
+        // Anchor edge-to-edge, so a popup shorter than popupHeight still
+        // sits flush against the field when flipped above it.
+        targetAnchor: flipAbove ? Alignment.topLeft : Alignment.bottomLeft,
+        followerAnchor: flipAbove ? Alignment.bottomLeft : Alignment.topLeft,
+        // Same tap-region group as the text field: tapping a suggestion is
+        // not a "tap outside", so desktop/web don't unfocus the field (and
+        // tear the popup down) before the tap lands.
+        child: TextFieldTapRegion(
+          child: ACDAdaptivePopupSurface(
+            design: _design,
+            elevation: widget.popupElevation,
+            color: widget.popupColor,
+            borderRadius: widget.popupBorderRadius,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: popupHeight),
+              child: _buildSuggestionList(context),
+            ),
           ),
         ),
       ),
@@ -304,50 +436,75 @@ class _ACDAutocompleteFieldState<T> extends State<ACDAutocompleteField<T>> {
     switch (_state) {
       case ACDSearchLoading<T>():
         return widget.loadingBuilder?.call(context) ??
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: ACDAdaptiveProgress(
+                  design: _design,
+                  semanticsLabel: ACDDesignScope.stringsOf(context).loading,
+                ),
+              ),
             );
       case ACDSearchError<T>(:final error):
         return widget.errorBuilder?.call(context, error) ??
-            Padding(padding: const EdgeInsets.all(16), child: Text('$error'));
+            Padding(
+              padding: const EdgeInsets.all(16),
+              // A generic, localizable message by default: the raw
+              // exception text is for logs, not users (errorBuilder
+              // still receives the error).
+              child: Text(ACDDesignScope.stringsOf(context).errorMessage),
+            );
       case ACDSearchEmpty<T>(:final query):
         return widget.emptyBuilder?.call(context, query) ??
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('No matches'),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(ACDDesignScope.stringsOf(context).noMatches),
             );
       case ACDSearchIdle<T>(:final items):
       case ACDSearchLoaded<T>(:final items):
         if (items.isEmpty) return const SizedBox.shrink();
+        // Resolved once for the whole list, not per row.
+        final ACDResolvedDesign design = _design;
+        final TextStyle itemStyle = (widget.itemStyle ?? const TextStyle())
+            .merge(
+              TextStyle(
+                color: widget.itemTextColor,
+                fontSize: widget.itemFontSize,
+                fontWeight: widget.itemFontWeight,
+                fontFamily: widget.itemFontFamily,
+              ),
+            );
+        final Color? tileColor =
+            widget.tileColor ??
+            (design.isCupertino ? null : acdMaterialSurface(context));
+        final String query = _controller.text;
         return ListView.builder(
           shrinkWrap: true,
           padding: EdgeInsets.zero,
           itemCount: items.length,
           itemBuilder: (context, index) {
             final T item = items[index];
+            final bool highlighted = index == _highlighted;
             if (widget.itemBuilder != null) {
-              return InkWell(
+              return ACDAdaptiveTappable(
+                design: design,
                 onTap: () => _select(item),
-                child: widget.itemBuilder!(context, item, false),
+                child: widget.itemBuilder!(context, item, highlighted),
               );
             }
-            return Material(
-              color: widget.tileColor,
-              child: ListTile(
-                title: Text(
-                  _asString(item),
-                  style: (widget.itemStyle ?? const TextStyle()).merge(
-                    TextStyle(
-                      color: widget.itemTextColor,
-                      fontSize: widget.itemFontSize,
-                      fontWeight: widget.itemFontWeight,
-                      fontFamily: widget.itemFontFamily,
-                    ),
-                  ),
-                ),
-                onTap: () => _select(item),
-              ),
+            final String label = _asString(item);
+            return ACDAdaptiveListTile(
+              design: design,
+              backgroundColor: tileColor,
+              selected: highlighted,
+              title: widget.highlightMatches
+                  ? ACDHighlightedText(
+                      text: label,
+                      query: query,
+                      style: itemStyle,
+                    )
+                  : Text(label, style: itemStyle),
+              onTap: () => _select(item),
             );
           },
         );
@@ -356,17 +513,29 @@ class _ACDAutocompleteFieldState<T> extends State<ACDAutocompleteField<T>> {
 
   @override
   Widget build(BuildContext context) {
-    return CompositedTransformTarget(
-      link: _layerLink,
-      child: TextField(
-        controller: _controller,
-        focusNode: _focusNode,
-        decoration: widget.decoration,
-        onSubmitted: (text) {
-          widget.onSubmitted?.call(text);
-          if (widget.clearOnSubmit) _controller.clear();
-          _removeOverlay();
-        },
+    _design = ACDDesign.resolve(context, widget.design);
+    return OverlayPortal(
+      controller: _portal,
+      overlayChildBuilder: _buildOverlay,
+      child: CompositedTransformTarget(
+        link: _layerLink,
+        child: Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: _onKey,
+          child: ACDAdaptiveTextField(
+            design: _design,
+            controller: _controller,
+            focusNode: _focusNode,
+            decoration: widget.decoration,
+            cupertinoStyle: widget.cupertinoStyle,
+            onSubmitted: (text) {
+              widget.onSubmitted?.call(text);
+              if (widget.clearOnSubmit) _controller.clear();
+              _removeOverlay();
+            },
+          ),
+        ),
       ),
     );
   }
