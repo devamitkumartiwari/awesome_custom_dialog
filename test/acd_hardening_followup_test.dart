@@ -419,4 +419,126 @@ void main() {
     expect(find.bySemanticsLabel('Rate this app'), findsOneWidget);
     handle.dispose();
   });
+
+  testWidgets('a searchable list fits a fixed-height dialog on a tall screen', (
+    tester,
+  ) async {
+    // Half of this screen (585) is taller than the dialog (400): the list
+    // must shrink to the space left under the title instead of overflowing.
+    await tester.binding.setSurfaceSize(const Size(360, 1170));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    late BuildContext ctx;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (c) {
+            ctx = c;
+            return const Scaffold();
+          },
+        ),
+      ),
+    );
+    ACDDialog().build(ctx)
+      ..height = 400
+      ..text(padding: const EdgeInsets.all(24), text: 'Choose a country')
+      ..searchableList<String>(items: List.generate(30, (i) => 'Item $i'))
+      ..show();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Choose a country'), findsOneWidget);
+    expect(find.text('Item 0'), findsOneWidget);
+  });
+
+  group('default toast colours', () {
+    /// Every fill colour painted by a DecoratedBox/Container/Material in the
+    /// toast's subtree.
+    Set<Color> fills(WidgetTester tester) {
+      final Finder card = find.byType(ACDToastCard);
+      final Set<Color> out = {};
+      for (final Element e
+          in find
+              .descendant(
+                of: card,
+                matching: find.byWidgetPredicate((_) => true),
+              )
+              .evaluate()) {
+        final Widget w = e.widget;
+        Decoration? d;
+        if (w is DecoratedBox) d = w.decoration;
+        if (w is Container) d = w.decoration;
+        if (d is BoxDecoration && d.color != null) out.add(d.color!);
+        if (d is ShapeDecoration && d.color != null) out.add(d.color!);
+        if (w is Material && w.color != null) out.add(w.color!);
+      }
+      return out;
+    }
+
+    Future<void> showToast(WidgetTester tester, ThemeData theme) async {
+      late BuildContext ctx;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme,
+          home: Builder(
+            builder: (c) {
+              ctx = c;
+              return const Scaffold();
+            },
+          ),
+        ),
+      );
+      ACDToastManager.show(
+        ctx,
+        const ACDToastConfig(message: 'Hi', autoDismissAfter: Duration.zero),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('light theme keeps the near-black toast', (tester) async {
+      await showToast(tester, ThemeData(brightness: Brightness.light));
+      expect(fills(tester), contains(const Color(0xDD000000)));
+    });
+
+    testWidgets('dark theme uses the inverse surface', (tester) async {
+      final ThemeData dark = ThemeData(brightness: Brightness.dark);
+      await showToast(tester, dark);
+      expect(fills(tester), contains(dark.colorScheme.inverseSurface));
+      expect(fills(tester), isNot(contains(const Color(0xDD000000))));
+      final Text text = tester.widget(find.text('Hi'));
+      expect(
+        text.style?.color ??
+            DefaultTextStyle.of(tester.element(find.text('Hi'))).style.color,
+        dark.colorScheme.onInverseSurface,
+      );
+    });
+
+    testWidgets('Cupertino toast shows the blurred iOS HUD', (tester) async {
+      late BuildContext ctx;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (c) {
+              ctx = c;
+              return const Scaffold();
+            },
+          ),
+        ),
+      );
+      ACDToastManager.show(
+        ctx,
+        const ACDToastConfig(
+          message: 'Copied',
+          design: ACDDesign.cupertino,
+          autoDismissAfter: Duration.zero,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(ACDToastCard),
+          matching: find.byType(BackdropFilter),
+        ),
+        findsOneWidget,
+      );
+    });
+  });
 }

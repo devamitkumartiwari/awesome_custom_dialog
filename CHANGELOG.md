@@ -16,6 +16,7 @@
 - **The warning colour passes WCAG AA.** `ACDContentType.warning` is now `#B45309` (it was `#FCA652`), and the Material `warning()` icon uses the contrast-safe token.
 - **`ACDMultiDropdownField` shows removable chips.** Extra selections collapse into a "+N" chip. `chipBuilder` customises the chips; `displayMode: ACDMultiDisplay.text` restores the old comma-joined text.
 - **Material dark mode uses theme surfaces.** The dialog card, list rows and popups use `surfaceContainerHigh`; their text uses `onSurface`. Light mode is unchanged.
+- **The default toast stands out in dark mode.** With no colour or content type set, a toast now uses the theme's `inverseSurface` in dark mode (as Material 3 snackbars do), instead of near-black on a dark screen. Light mode keeps the same `#DD000000`.
 
 **Behaviour changes:**
 - `ACDSlideAction` confirms once. Re-arm it with `controller.reset()` or `autoResetAfter`.
@@ -125,7 +126,9 @@
   - `showDelay`, `dedupeById`, reused ids and `maxVisible: 0` are handled.
   - `blockBackgroundInteraction` works.
   - The exit animation no longer replaces the entrance.
+  - A Cupertino toast now actually shows the blurred iOS HUD (the default colour and style used to block it).
 - **Fields & lists:**
+  - **Fixed-height dialogs:** `searchableList()`/`multiSearchableList()` no longer overflow them on tall screens. The list now shrinks to the space left under the title. The new `ACDFillRemaining` does the same for your own content.
   - **Searchable list:** drops stale results, ignores caret-only changes, commits multi-select without a confirm button, and keeps paging and retries failed pages.
   - **Autocompletes:** no stale results or reopen-on-caret.
   - **Dropdown:** adaptive/sheet modes open as sheets; the menu popup works in RTL.
@@ -135,7 +138,7 @@
     - shrinking `length` trims the text;
     - `inputFormatters` run before the length limit;
     - pasted codes with separators are accepted.
-  - **Slide action:** dual direction and RTL wave fixed.
+  - **Slide action:** dual direction and RTL wave fixed; `.swipeButton()` accepts `autoResetAfter`.
   - **Switch:** follows a swapped controller.
   - **Rating bar:** hit-tests each star's real position.
   - **Stepper:** connectors line up with `below` titles.
@@ -147,7 +150,7 @@
 ### 🧹 Maintenance
 - `flutter_lints` `^6.0.0`, plus `strict-casts`/`strict-raw-types`.
 - `.pubignore` keeps build output and editor files out of the package, and the pubspec description is under 180 characters.
-- The example app now has one screen per widget, and uses `google_fonts` 9, AGP 9.3.1, Kotlin 2.4.20 and Gradle 9.5.0.
+- The example app now has one screen per widget, and uses `google_fonts` 9, AGP 9.3.1 with built-in Kotlin (no separate Kotlin Gradle plugin), and Gradle 9.5.0.
 
 ## 1.6.0
 

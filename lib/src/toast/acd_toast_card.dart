@@ -46,6 +46,9 @@ class ACDToastCard extends StatefulWidget {
   State<ACDToastCard> createState() => _ACDToastCardState();
 }
 
+/// The light-theme default toast fill (unchanged since 1.x).
+const Color _kLightDefaultFill = Color(0xDD000000);
+
 class _ACDToastCardState extends State<ACDToastCard> {
   bool _hovering = false;
 
@@ -76,16 +79,24 @@ class _ACDToastCardState extends State<ACDToastCard> {
         ? ACDDesignTokens.of(context, design)
         : null;
 
+    // The plain default toast (no colour, no content type): near-black in a
+    // light theme as always, but the inverse surface in a dark theme — a
+    // black toast on a dark screen barely shows.
+    final bool plainDefault =
+        _config.backgroundColor == null && _config.contentType == null;
+    final ThemeData theme = Theme.of(context);
+    final bool darkDefault =
+        plainDefault && theme.brightness == Brightness.dark;
     final Color baseColor =
         _config.backgroundColor ??
         _config.contentType?.color ??
-        ACDToastConfig.fallback.backgroundColor!;
+        (darkDefault ? theme.colorScheme.inverseSurface : _kLightDefaultFill);
     final ACDToastStyle style = _config.style ?? ACDToastStyle.filled;
     final ACDToastStyleResolved resolved = style.resolve(baseColor);
     final Color textColor =
         _config.textColor ??
         tokens?.onSurface ??
-        ACDToastConfig.fallback.textColor!;
+        (darkDefault ? theme.colorScheme.onInverseSurface : Colors.white);
 
     final Color? effectiveFill = tokens != null
         ? tokens.surfaceContainer.withValues(alpha: 0.82)

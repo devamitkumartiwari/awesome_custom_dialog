@@ -188,7 +188,7 @@ class HomeScreen extends StatelessWidget {
     ACDDialog.init(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Awesome Custom Dialog'),
+        title: const Text('ACD Showcase'),
         actions: [
           ValueListenableBuilder<ThemeMode>(
             valueListenable: themeModeNotifier,

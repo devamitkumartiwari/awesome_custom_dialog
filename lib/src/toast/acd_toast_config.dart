@@ -124,10 +124,15 @@ final class ACDToastConfig {
 
   // ── Colors / shape ───────────────────────────────────────────────────────
   /// Base fill/border color (exact resolution depends on [style]). Falls
-  /// back to a dark translucent default, or [contentType]'s color when set.
+  /// back to [contentType]'s color when set; otherwise to the design
+  /// default — a dark translucent `#DD000000` in a light Material theme,
+  /// the theme's `inverseSurface` in a dark one (so it stands out from a
+  /// dark screen, like a Material 3 snackbar), and the blurred HUD on
+  /// Cupertino.
   final Color? backgroundColor;
 
-  /// Message (and icon, when not overridden) color. Falls back to white.
+  /// Message (and icon, when not overridden) color. Falls back to white —
+  /// or `onInverseSurface` on the dark-theme default fill.
   final Color? textColor;
 
   /// Gradient fill, overriding [backgroundColor]/[style]'s fill when set.
@@ -325,12 +330,13 @@ final class ACDToastConfig {
   /// output as before.
   static const ACDToastConfig fallback = ACDToastConfig(
     gravity: ACDGravity.bottom,
-    style: ACDToastStyle.filled,
+    // style: unset — the card defaults to filled, and an unset style is what
+    // lets a Cupertino toast use the iOS HUD.
     showIcon: true,
     animatedIcon: false,
     showLoadingIndicator: false,
-    backgroundColor: Color(0xDD000000),
-    textColor: Colors.white,
+    // backgroundColor / textColor: deliberately unset — `null` means "design
+    // default", resolved per theme by the toast card (see backgroundColor).
     borderWidth: 1.0,
     borderRadius: 24.0,
     fontSize: 14.0,

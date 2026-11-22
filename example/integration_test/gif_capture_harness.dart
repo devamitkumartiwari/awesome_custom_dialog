@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter_test/flutter_test.dart';
 
 /// Shared brand seed for every README demo GIF — a modern indigo/violet
@@ -13,14 +14,15 @@ import 'package:flutter_test/flutter_test.dart';
 /// deliberate palette instead of Flutter's default debug blue.
 const Color demoSeedColor = Color(0xFF6C5CE7);
 
-/// A soft, warm off-white — elegant and neutral without the flat, slightly
-/// clinical look of `Colors.grey.shade100`.
-const Color demoBackground = Color(0xFFF8F7FC);
+/// Every README GIF and screenshot is dark mode: a deep, slightly violet
+/// near-black that matches the seed instead of a flat pure black.
+const Color demoBackground = Color(0xFF131218);
 
 /// The theme every capture script's `MaterialApp` should use, for a
 /// consistent, modern Material 3 look across the whole README.
 final ThemeData demoTheme = ThemeData(
   useMaterial3: true,
+  brightness: Brightness.dark,
   colorSchemeSeed: demoSeedColor,
   scaffoldBackgroundColor: demoBackground,
   elevatedButtonTheme: ElevatedButtonThemeData(
@@ -53,6 +55,13 @@ class GifCapture {
   final WidgetTester tester;
   final String outDir;
   final GlobalKey _boundaryKey;
+
+  /// Where frames are written. On a phone the relative [outDir] has no
+  /// writable home, so it goes under the app's cache directory instead —
+  /// pull it with `adb shell run-as <app id> …` (see tool/pull_gif_frames.sh).
+  String get _root => (Platform.isAndroid || Platform.isIOS)
+      ? '${Directory.systemTemp.path}/$outDir'
+      : outDir;
   int _frame = 0;
 
   /// Wraps [child] for capture — pass the result to [WidgetTester.pumpWidget].
@@ -65,9 +74,83 @@ class GifCapture {
     double height = 720,
     double pixelRatio = 2,
   }) async {
+    await _loadHostFonts();
+    // Start from an empty frame folder, so a shorter re-capture never keeps
+    // stale trailing frames from an earlier run.
+    final Directory frames = Directory(_root);
+    if (frames.existsSync()) frames.deleteSync(recursive: true);
     await tester.binding.setSurfaceSize(Size(width, height));
     tester.view.devicePixelRatio = pixelRatio;
-    addTearDown(() => tester.view.resetDevicePixelRatio());
+    // The layout must see the same 360x720 screen as the captured frame,
+    // not the phone's real (taller) display.
+    tester.view.physicalSize = Size(width * pixelRatio, height * pixelRatio);
+    // On a real phone the on-screen keyboard (opened by enterText), the
+    // status/navigation bars and the user's font size would all leak into
+    // the layout. None of them is part of the captured frame, so pin them:
+    // every GIF is the full, unsqueezed 360x720 app screen.
+    tester.view.viewInsets = FakeViewPadding.zero;
+    tester.view.viewPadding = FakeViewPadding.zero;
+    tester.view.padding = FakeViewPadding.zero;
+    tester.platformDispatcher.textScaleFactorTestValue = 1;
+    addTearDown(() {
+      tester.view.resetDevicePixelRatio();
+      tester.view.resetPhysicalSize();
+      tester.view.resetViewInsets();
+      tester.view.resetViewPadding();
+      tester.view.resetPadding();
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+    });
+  }
+
+  static bool _fontsLoaded = false;
+
+  /// On a PC (`flutter test`, not a phone) text would render in the test
+  /// font's placeholder boxes. Load the real fonts instead, from paths given
+  /// as `--dart-define`s (see tool/capture_gifs.sh):
+  /// - `ACD_MATERIAL_FONTS`: the Flutter SDK's `bin/cache/artifacts/material_fonts`
+  /// - `ACD_CUPERTINO_ICONS`: `cupertino_icons`' `assets/CupertinoIcons.ttf`
+  /// Roboto also stands in for the Cupertino system text families.
+  Future<void> _loadHostFonts() async {
+    if (_fontsLoaded || Platform.isAndroid || Platform.isIOS) return;
+    _fontsLoaded = true;
+    const String fontsDir = String.fromEnvironment('ACD_MATERIAL_FONTS');
+    const String cupertinoIcons = String.fromEnvironment('ACD_CUPERTINO_ICONS');
+    if (fontsDir.isEmpty) return;
+    await tester.runAsync(() async {
+      Future<ByteData> bytes(String path) async =>
+          ByteData.sublistView(await File(path).readAsBytes());
+      Future<void> load(String family, List<String> paths) async {
+        final FontLoader loader = FontLoader(family);
+        for (final String path in paths) {
+          loader.addFont(bytes(path));
+        }
+        await loader.load();
+      }
+
+      final List<String> roboto = [
+        for (final String w in const [
+          'thin',
+          'light',
+          'regular',
+          'medium',
+          'bold',
+          'black',
+          'italic',
+        ])
+          '$fontsDir/roboto-$w.ttf',
+      ];
+      for (final String family in const [
+        'Roboto',
+        'CupertinoSystemText',
+        'CupertinoSystemDisplay',
+      ]) {
+        await load(family, roboto);
+      }
+      await load('MaterialIcons', ['$fontsDir/materialicons-regular.otf']);
+      if (cupertinoIcons.isNotEmpty) {
+        await load('packages/cupertino_icons/CupertinoIcons', [cupertinoIcons]);
+      }
+    });
   }
 
   /// Snapshots the current frame to `outDir/frame_%04d.png`. Call right
@@ -83,7 +166,7 @@ class GifCapture {
       );
       image.dispose();
       final File file = File(
-        '$outDir/frame_${_frame.toString().padLeft(4, '0')}.png',
+        '$_root/frame_${_frame.toString().padLeft(4, '0')}.png',
       );
       await file.parent.create(recursive: true);
       await file.writeAsBytes(bytes!.buffer.asUint8List());

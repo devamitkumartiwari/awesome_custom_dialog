@@ -12,6 +12,12 @@ Every widget looks like **Material** by default, and can switch to **Cupertino**
 **adaptive** with one line. There are no third-party dependencies, only Flutter's own
 `material_ui` and `cupertino_ui`.
 
+<p align="center">
+  <img src="doc/screenshots/home.png" width="240" alt="Example app home screen">
+  <img src="doc/screenshots/dialog-material.png" width="240" alt="A Material dialog">
+  <img src="doc/screenshots/dialog-cupertino.png" width="240" alt="The same dialog with the Cupertino design">
+</p>
+
 > **Upgrading from 1.x?** 2.0 needs Flutter 3.50 and changes a few defaults. See
 > [Upgrading from 1.x](#upgrading-from-1x).
 
@@ -142,6 +148,8 @@ Positions mirror automatically in right-to-left languages.
 
 A sheet that slides up from the bottom, with a grab handle. Drag it down to close it.
 
+![Bottom sheet](doc/gifs/bottom-sheet.gif)
+
 ```dart
 final target = await (ACDDialog.bottomSheet(context: context)
       ..text(text: 'Share to')
@@ -218,6 +226,8 @@ ACDDialog.toast(
 
 A promise toast turns from "Saving…" into a success or error message in place.
 
+![Loading dialog, promise and undo toasts](doc/gifs/async-feedback.gif)
+
 ```dart
 await ACDDialog.promiseToast(
   context: context,
@@ -276,6 +286,8 @@ Every field works inside a normal `Form`, with `validator`, `onSaved` and `reset
 For switches, ratings and autocomplete, use `ACDSwitchFormField`, `ACDRatingFormField`
 and `ACDAutocompleteFormField`.
 
+![Form-field wrappers](doc/gifs/form-fields.gif)
+
 ### Dropdown
 
 A searchable dropdown that sits in your form and shows the picked value.
@@ -317,7 +329,7 @@ For triggers, use `ACDTriggerAutocompleteField(triggers: [ACDAutocompleteTrigger
 
 A PIN or one-time-code field. SMS code autofill works out of the box.
 
-![Pin and OTP field](doc/gifs/pin-field.gif)
+![PIN / OTP field with resend countdown](doc/gifs/otp.gif)
 
 ```dart
 final pin = ACDPinController();

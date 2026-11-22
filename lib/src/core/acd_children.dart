@@ -54,28 +54,52 @@ class _ACDChildrenState extends State<ACDChildren> {
 
   Widget _buildColumn(bool visible) {
     final ACDStaggerOptions? options = widget.staggerOptions;
-    final List<Widget> children = options == null
-        ? widget.widgetList
-        : <Widget>[
+    Widget animated(int i, Widget child) => options == null
+        ? child
+        : ACDMotion(
+            key: ValueKey<int>(i),
+            visible: visible,
+            delay: options.delayForIndex(
+              i,
+              widget.widgetList.length,
+              visible: visible,
+            ),
+            duration: options.itemDuration,
+            curve: options.curve,
+            effect: options.effect,
+            exitEffect: options.exitEffect,
+            child: child,
+          );
+
+    final bool hasFill = widget.widgetList.any((w) => w is ACDFillRemaining);
+    if (!hasFill) {
+      return Column(
+        mainAxisSize: MainAxisSize.min, // IMP-07: wrap content, don't expand
+        children: [
+          for (int i = 0; i < widget.widgetList.length; i++)
+            animated(i, widget.widgetList[i]),
+        ],
+      );
+    }
+    // A fill child takes whatever height is left — but only when there is a
+    // limit to fill (a fixed-height dialog, or a sheet's max height).
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool bounded = constraints.hasBoundedHeight;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
             for (int i = 0; i < widget.widgetList.length; i++)
-              ACDMotion(
-                key: ValueKey<int>(i),
-                visible: visible,
-                delay: options.delayForIndex(
-                  i,
-                  widget.widgetList.length,
-                  visible: visible,
+              switch (widget.widgetList[i]) {
+                final ACDFillRemaining fill when bounded => Flexible(
+                  child: animated(i, fill.child),
                 ),
-                duration: options.itemDuration,
-                curve: options.curve,
-                effect: options.effect,
-                exitEffect: options.exitEffect,
-                child: widget.widgetList[i],
-              ),
-          ];
-    return Column(
-      mainAxisSize: MainAxisSize.min, // IMP-07: wrap content, don't expand
-      children: children,
+                final ACDFillRemaining fill => animated(i, fill.child),
+                final Widget other => animated(i, other),
+              },
+          ],
+        );
+      },
     );
   }
 
@@ -102,4 +126,30 @@ class _ACDChildrenState extends State<ACDChildren> {
     if (onDismissed != null) scheduleMicrotask(onDismissed);
     super.dispose();
   }
+}
+
+/// Dialog content that may shrink to the height a fixed-height dialog has
+/// left after its other content (a title, buttons…), instead of insisting
+/// on its own preferred height and overflowing. Without a height limit it
+/// lays out as usual.
+///
+/// `searchableList()` and `multiSearchableList()` use it; wrap your own
+/// scrollable content in it the same way:
+///
+/// ```dart
+/// ACDDialog().build(context)
+///   ..height = 420
+///   ..text(text: 'Pick a file')
+///   ..widget(ACDFillRemaining(child: ListView(children: files)))
+///   ..show();
+/// ```
+class ACDFillRemaining extends StatelessWidget {
+  /// Creates an [ACDFillRemaining] around [child].
+  const ACDFillRemaining({super.key, required this.child});
+
+  /// The content that fills the remaining height.
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => child;
 }
