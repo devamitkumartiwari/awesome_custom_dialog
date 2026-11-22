@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:material_ui/material_ui.dart';
 
 import 'acd_motion_effect.dart';
@@ -21,7 +23,10 @@ final class ACDStaggerOptions {
     this.exitEffect,
     this.reverseOnExit = true,
     this.maxStaggeredItems = 20,
-  });
+  }) : assert(
+         maxStaggeredItems == null || maxStaggeredItems > 0,
+         'maxStaggeredItems must be null or at least 1',
+       );
 
   /// Delay added per successive item on top of [startDelay].
   final Duration interval;
@@ -82,7 +87,9 @@ final class ACDStaggerOptions {
     final int effectiveIndex = (!visible && reverseOnExit)
         ? itemCount - 1 - index
         : index;
-    final int? cap = maxStaggeredItems;
+    final int? cap = maxStaggeredItems == null
+        ? null
+        : math.max(1, maxStaggeredItems!);
     final int slot = cap == null || effectiveIndex < cap
         ? effectiveIndex
         : cap - 1;

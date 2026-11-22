@@ -49,5 +49,5 @@ class ACDDesignScope extends InheritedWidget {
   bool updateShouldNotify(ACDDesignScope oldWidget) =>
       design != oldWidget.design ||
       hapticsEnabled != oldWidget.hapticsEnabled ||
-      !identical(strings, oldWidget.strings);
+      strings != oldWidget.strings;
 }

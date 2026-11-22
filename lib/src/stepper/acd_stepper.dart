@@ -79,7 +79,11 @@ class ACDStepper extends StatelessWidget {
     this.unfinishedLineColor,
     this.showLoadingAnimation = false,
     this.design,
-  }) : assert(steps.isNotEmpty, 'steps must not be empty');
+  }) : assert(steps.isNotEmpty, 'steps must not be empty'),
+       assert(
+         activeStep >= 0 && activeStep <= steps.length,
+         'activeStep must be in 0..steps.length (steps.length = all finished)',
+       );
 
   /// Titles for each step, in order. Also determines the step count.
   final List<String> steps;
@@ -92,13 +96,17 @@ class ACDStepper extends StatelessWidget {
   /// Horizontal wizard bar vs. vertical timeline.
   final Axis direction;
 
-  /// Fired when a step marker is tapped, with its index. Fires regardless of
-  /// [steppingEnabled] so callers can validate before advancing.
+  /// Fired when a step marker is tapped, with its index. Update
+  /// [activeStep] here (after any validation) to move the stepper.
   final ValueChanged<int>? onStepReached;
 
-  /// When false, tapping a step never visually changes which step looks
-  /// active from within this widget alone — the caller decides whether to
-  /// update [activeStep] inside [onStepReached].
+  /// Has no effect: [ACDStepper] never changes [activeStep] by itself, so
+  /// there is nothing to disable. Update [activeStep] in [onStepReached],
+  /// or leave [onStepReached] `null` to make the markers non-tappable.
+  @Deprecated(
+    'Has no effect. Update activeStep in onStepReached, or pass a null '
+    'onStepReached for non-tappable markers.',
+  )
   final bool steppingEnabled;
 
   /// Default marker shape, ignored when [customStep] is supplied.
@@ -322,11 +330,29 @@ class ACDStepper extends StatelessWidget {
           ),
         );
         if (!isLast) {
+          // The outer Column stretches its children, which would centre a
+          // bare SizedBox regardless of verticalAlignment: align the
+          // connector under the marker explicitly.
+          final double markerWidth = customStep == null
+              ? _markerExtent(context)
+              : lineThickness;
           children.add(
-            SizedBox(
-              height: 24,
-              width: lineThickness,
-              child: _line(context, i, Axis.vertical),
+            Align(
+              alignment: switch (verticalAlignment) {
+                CrossAxisAlignment.start => AlignmentDirectional.centerStart,
+                CrossAxisAlignment.end => AlignmentDirectional.centerEnd,
+                _ => Alignment.center,
+              },
+              child: SizedBox(
+                height: 24,
+                width: markerWidth,
+                child: Center(
+                  child: SizedBox(
+                    width: lineThickness,
+                    child: _line(context, i, Axis.vertical),
+                  ),
+                ),
+              ),
             ),
           );
         }

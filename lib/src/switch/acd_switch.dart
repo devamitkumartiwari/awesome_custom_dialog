@@ -105,6 +105,7 @@ class ACDSwitch extends StatefulWidget {
     this.animationDuration = const Duration(milliseconds: 200),
     this.animationCurve = Curves.easeOut,
     this.design,
+    this.semanticLabel,
   });
 
   /// A ready-made Material-style preset — no styling required.
@@ -187,6 +188,11 @@ class ACDSwitch extends StatefulWidget {
   /// explicit colors, Cupertino uses the iOS palette (system green when on,
   /// system fill when off) and adds a selection haptic on toggle.
   final ACDDesign? design;
+
+  /// What this control is for, read by screen readers before its value
+  /// (e.g. "Notifications", "Rate this app"). Without it, only the value
+  /// is announced.
+  final String? semanticLabel;
 
   /// Opacity applied to the whole switch when [enabled] is `false`.
   final double disabledOpacity;
@@ -425,6 +431,8 @@ class _ACDSwitchState extends State<ACDSwitch>
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller?.removeListener(_onControllerChanged);
       widget.controller?.addListener(_onControllerChanged);
+      // The new controller may hold a different value: follow it.
+      if (!_dragging) unawaited(_animateTo(_effectiveValue ? 1.0 : 0.0));
     }
     if (widget.controller == null &&
         widget.value != null &&
@@ -441,8 +449,12 @@ class _ACDSwitchState extends State<ACDSwitch>
     super.dispose();
   }
 
+  /// Set while [_commit] writes the controller after a fling, so the
+  /// listener doesn't replace the fling's spring with a curved tween.
+  bool _committingFling = false;
+
   void _onControllerChanged() {
-    if (!_dragging) {
+    if (!_dragging && !_committingFling) {
       unawaited(_animateTo(_effectiveValue ? 1.0 : 0.0));
     }
   }
@@ -473,8 +485,17 @@ class _ACDSwitchState extends State<ACDSwitch>
   void _commit(bool newValue, {double? velocity}) {
     final bool changed = newValue != _effectiveValue;
     if (widget.controller != null) {
-      if (velocity != null) _settle(newValue ? 1.0 : 0.0, velocity);
-      widget.controller!.value = newValue;
+      if (velocity != null) {
+        _committingFling = true;
+        try {
+          widget.controller!.value = newValue;
+        } finally {
+          _committingFling = false;
+        }
+        _settle(newValue ? 1.0 : 0.0, velocity);
+      } else {
+        widget.controller!.value = newValue;
+      }
     } else if (widget.value == null) {
       setState(() => _internalValue = newValue);
       if (velocity != null) {
@@ -812,6 +833,7 @@ class _ACDSwitchState extends State<ACDSwitch>
     // Screen readers: a real switch (toggled state + activate action).
     // Keyboard: focusable, Space/Enter toggles, with a visible focus ring.
     return Semantics(
+      label: widget.semanticLabel,
       toggled: active,
       enabled: widget.enabled,
       value: active ? strings.on : strings.off,

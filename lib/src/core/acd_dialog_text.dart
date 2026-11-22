@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../design/acd_design.dart';
 import '../design/acd_design_tokens.dart';
+import '../design/internal/acd_platform_support.dart';
 import 'acd_dialog.dart';
 
 /// Adds `text()` to [ACDDialog] for adding a styled line of text.
@@ -41,7 +42,7 @@ extension ACDDialogText on ACDDialog {
               final ACDResolvedDesign design = resolveDesign(context);
               final Color defaultColor = design.isCupertino
                   ? ACDDesignTokens.of(context, design).onSurface
-                  : Colors.black;
+                  : acdMaterialOnSurface(context);
               return Text(
                 text ?? '',
                 textAlign: textAlign,

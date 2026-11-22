@@ -27,7 +27,8 @@ class ACDOverlayTransition extends StatelessWidget {
       tween: Tween(begin: 0.0, end: 1.0),
       duration: duration,
       builder: (context, value, childWidget) =>
-          animatedFunc!(childWidget!, AlwaysStoppedAnimation<double>(value)),
+          animatedFunc!(childWidget!, AlwaysStoppedAnimation<double>(value))
+              as Widget,
       child: child,
     );
   }

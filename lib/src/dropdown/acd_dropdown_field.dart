@@ -1,4 +1,5 @@
 import 'dart:async' show unawaited;
+import 'dart:math' as math;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:material_ui/material_ui.dart';
@@ -65,6 +66,9 @@ class ACDDropdownField<T> extends FormField<T> {
     this.compareFn,
     this.isDisabledItem,
     this.favoriteItems,
+    this.groupBy,
+    this.cacheResults = false,
+    this.onCreate,
     this.onFindPaged,
     this.loadMoreBuilder,
     this.design,
@@ -123,6 +127,11 @@ class ACDDropdownField<T> extends FormField<T> {
                    compareFn: compareFn,
                    isDisabledItem: isDisabledItem,
                    favoriteItems: favoriteItems,
+                   groupBy: groupBy,
+                   cacheResults: cacheResults,
+                   onCreate: onCreate,
+                   maxSelection: null,
+                   showSelectAll: false,
                    onFindPaged: onFindPaged,
                    loadMoreBuilder: loadMoreBuilder,
                    onSingleChange: (item) {
@@ -238,6 +247,16 @@ class ACDDropdownField<T> extends FormField<T> {
   /// Shown pinned at the top of the idle (pre-search) popup list.
   final List<T>? favoriteItems;
 
+  /// Groups popup rows under section headers — see `ACDSearchableListTile.groupBy`.
+  final String Function(T item)? groupBy;
+
+  /// Caches `onFind` results per query while the popup is open.
+  final bool cacheResults;
+
+  /// Offers a "Create" row when a search finds nothing — see
+  /// `ACDSearchableListTile.onCreate`.
+  final Future<T?> Function(String query)? onCreate;
+
   /// Paginated async search/load — see `ACDSearchableListTile.onFindPaged`.
   /// When set, supersedes both [items] and [onFind].
   final Future<List<T>> Function(String keyword, int page)? onFindPaged;
@@ -269,8 +288,8 @@ class ACDMultiDropdownField<T> extends FormField<List<T>> {
     this.showClearButton = false,
     this.clearIcon,
     this.showConfirmCancelButtons = true,
-    this.confirmText = 'OK',
-    this.cancelText = 'Cancel',
+    this.confirmText,
+    this.cancelText,
     this.confirmColor,
     this.cancelColor,
     this.confirmFontWeight,
@@ -294,6 +313,11 @@ class ACDMultiDropdownField<T> extends FormField<List<T>> {
     this.compareFn,
     this.isDisabledItem,
     this.favoriteItems,
+    this.groupBy,
+    this.cacheResults = false,
+    this.onCreate,
+    this.maxSelection,
+    this.showSelectAll = false,
     this.onFindPaged,
     this.loadMoreBuilder,
     this.design,
@@ -386,6 +410,11 @@ class ACDMultiDropdownField<T> extends FormField<List<T>> {
                    compareFn: compareFn,
                    isDisabledItem: isDisabledItem,
                    favoriteItems: favoriteItems,
+                   groupBy: groupBy,
+                   cacheResults: cacheResults,
+                   onCreate: onCreate,
+                   maxSelection: maxSelection,
+                   showSelectAll: showSelectAll,
                    onFindPaged: onFindPaged,
                    loadMoreBuilder: loadMoreBuilder,
                    initialValues: value,
@@ -463,10 +492,10 @@ class ACDMultiDropdownField<T> extends FormField<List<T>> {
   final bool showConfirmCancelButtons;
 
   /// Confirm button label.
-  final String confirmText;
+  final String? confirmText;
 
   /// Cancel button label.
-  final String cancelText;
+  final String? cancelText;
 
   /// Confirm button color.
   final Color? confirmColor;
@@ -542,6 +571,22 @@ class ACDMultiDropdownField<T> extends FormField<List<T>> {
   /// Shown pinned at the top of the idle (pre-search) popup list.
   final List<T>? favoriteItems;
 
+  /// Groups popup rows under section headers — see `ACDSearchableListTile.groupBy`.
+  final String Function(T item)? groupBy;
+
+  /// Caches `onFind` results per query while the popup is open.
+  final bool cacheResults;
+
+  /// Offers a "Create" row when a search finds nothing — see
+  /// `ACDSearchableListTile.onCreate`.
+  final Future<T?> Function(String query)? onCreate;
+
+  /// The most items that can be selected.
+  final int? maxSelection;
+
+  /// Adds a "Select all" row to the popup.
+  final bool showSelectAll;
+
   /// Paginated async search/load — see `ACDSearchableListTile.onFindPaged`.
   /// When set, supersedes both [items] and [onFind].
   final Future<List<T>> Function(String keyword, int page)? onFindPaged;
@@ -596,14 +641,19 @@ void _openPopup<T>({
   required bool Function(T a, T b)? compareFn,
   required bool Function(T item)? isDisabledItem,
   required List<T>? favoriteItems,
+  required String Function(T item)? groupBy,
+  required bool cacheResults,
+  required Future<T?> Function(String query)? onCreate,
+  required int? maxSelection,
+  required bool showSelectAll,
   required Future<List<T>> Function(String keyword, int page)? onFindPaged,
   required Widget Function(BuildContext context)? loadMoreBuilder,
   void Function(T? item)? onSingleChange,
   void Function(List<T> items)? onMultiChange,
   List<T>? initialValues,
   bool showConfirmCancelButtons = true,
-  String confirmText = 'OK',
-  String cancelText = 'Cancel',
+  String? confirmText,
+  String? cancelText,
   Color? confirmColor,
   Color? cancelColor,
   FontWeight? confirmFontWeight,
@@ -670,7 +720,7 @@ void _openPopup<T>({
       final dialog = ACDDialog(design: design).build(context)
         ..borderRadius = 16
         ..height = popupHeight ?? 420;
-      if (mode == ACDDropdownMode.bottomSheet) {
+      if (effective == ACDDropdownMode.bottomSheet) {
         dialog
           ..gravity = ACDGravity.bottom
           ..width = double.infinity
@@ -711,6 +761,11 @@ void _openPopup<T>({
           compareFn: compareFn,
           isDisabledItem: isDisabledItem,
           favoriteItems: favoriteItems,
+          groupBy: groupBy,
+          cacheResults: cacheResults,
+          onCreate: onCreate,
+          maxSelection: maxSelection,
+          showSelectAll: showSelectAll,
           onFindPaged: onFindPaged,
           loadMoreBuilder: loadMoreBuilder,
         );
@@ -740,6 +795,9 @@ void _openPopup<T>({
           compareFn: compareFn,
           isDisabledItem: isDisabledItem,
           favoriteItems: favoriteItems,
+          groupBy: groupBy,
+          cacheResults: cacheResults,
+          onCreate: onCreate,
           onFindPaged: onFindPaged,
           loadMoreBuilder: loadMoreBuilder,
         );
@@ -796,6 +854,11 @@ void _openPopup<T>({
         compareFn: compareFn,
         isDisabledItem: isDisabledItem,
         favoriteItems: favoriteItems,
+        groupBy: groupBy,
+        cacheResults: cacheResults,
+        onCreate: onCreate,
+        maxSelection: maxSelection,
+        showSelectAll: showSelectAll,
         onFindPaged: onFindPaged,
         loadMoreBuilder: loadMoreBuilder,
         dialogDismiss: dismiss,
@@ -1483,6 +1546,7 @@ class _ACDAnchoredPopupRoute<R> extends PopupRoute<R> {
         size: size,
         safeTop: padding.top + 8,
         safeBottom: padding.bottom + keyboard + 8,
+        textDirection: Directionality.of(context),
       ),
       child: builder(context),
     );
@@ -1518,12 +1582,14 @@ class _AnchoredPopupLayout extends SingleChildLayoutDelegate {
     required this.size,
     required this.safeTop,
     required this.safeBottom,
+    required this.textDirection,
   });
 
   final Rect anchor;
   final Size size;
   final double safeTop;
   final double safeBottom;
+  final TextDirection textDirection;
 
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
@@ -1533,8 +1599,10 @@ class _AnchoredPopupLayout extends SingleChildLayoutDelegate {
         ? below
         : (above > below ? above : below);
     return BoxConstraints.tightFor(
-      width: size.width.clamp(0, constraints.maxWidth - 16),
-      height: size.height.clamp(0, room.clamp(0, double.infinity)),
+      // max(0, …): clamp() throws when its upper bound is negative (a
+      // window narrower than the 16 px inset, or no room left at all).
+      width: size.width.clamp(0, math.max(0.0, constraints.maxWidth - 16)),
+      height: size.height.clamp(0, math.max(0.0, room)),
     );
   }
 
@@ -1543,7 +1611,12 @@ class _AnchoredPopupLayout extends SingleChildLayoutDelegate {
     final double below = screen.height - safeBottom - anchor.bottom;
     final bool flip = below < child.height && anchor.top - safeTop > below;
     final double y = flip ? anchor.top - child.height - 4 : anchor.bottom + 4;
-    final double x = anchor.left.clamp(8, screen.width - child.width - 8);
+    // Align to the field's start edge: its right edge under RTL.
+    final double preferred = textDirection == TextDirection.rtl
+        ? anchor.right - child.width
+        : anchor.left;
+    final double maxX = math.max(8.0, screen.width - child.width - 8);
+    final double x = preferred.clamp(8.0, maxX);
     return Offset(x, y);
   }
 
@@ -1552,5 +1625,6 @@ class _AnchoredPopupLayout extends SingleChildLayoutDelegate {
       anchor != old.anchor ||
       size != old.size ||
       safeTop != old.safeTop ||
-      safeBottom != old.safeBottom;
+      safeBottom != old.safeBottom ||
+      textDirection != old.textDirection;
 }

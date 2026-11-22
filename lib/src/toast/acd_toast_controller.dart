@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
 
+import '../core/acd_content_type.dart';
 import 'acd_toast_config.dart';
 import 'acd_toast_dismiss_reason.dart';
 import 'acd_toast_lifecycle.dart';
@@ -70,11 +71,19 @@ class ACDToastController {
     if (isDismissing) return;
     state = const ACDToastShowing();
     onChanged?.call();
-    config.onShown?.call();
+    // Start the timer first: a throwing onShown must not make the toast
+    // sticky by accident.
     _startAutoDismiss();
+    _guard('onShown', config.onShown);
   }
 
+  /// Set by the stack when a screen reader is navigating and this toast
+  /// has actions: the auto-dismiss timer is skipped so the actions stay
+  /// reachable.
+  bool holdForAccessibility = false;
+
   void _startAutoDismiss() {
+    if (holdForAccessibility) return;
     final Duration? total = config.autoDismissAfter;
     // Duration.zero is the sticky sentinel (see ACDToastConfig.autoDismissAfter)
     // — plain `null` can't mean "no timer" here since it means "inherit from
@@ -89,6 +98,59 @@ class ACDToastController {
     progressController
       ?..duration = total
       ..forward(from: 0.0);
+  }
+
+  /// Changes this toast in place — its message, look or timing — without
+  /// replacing it (no exit/entrance animation, same position in the stack).
+  /// A new [autoDismissAfter] restarts the timer from now
+  /// (`Duration.zero` makes it sticky); otherwise a running timer restarts
+  /// with the current duration when [restartTimer] is `true` (the default),
+  /// so the updated content gets its full reading time.
+  ///
+  /// A no-op once the toast is dismissing. Used by promise toasts
+  /// (loading → success/error).
+  void update({
+    String? message,
+    ACDContentType? contentType,
+    IconData? icon,
+    bool? showIcon,
+    bool? showLoadingIndicator,
+    Color? backgroundColor,
+    Color? textColor,
+    List<Widget>? actions,
+    Duration? autoDismissAfter,
+    bool restartTimer = true,
+  }) {
+    if (isDismissing) return;
+    config = config.copyWith(
+      message: message,
+      contentType: contentType,
+      icon: icon,
+      showIcon: showIcon,
+      showLoadingIndicator: showLoadingIndicator,
+      backgroundColor: backgroundColor,
+      textColor: textColor,
+      actions: actions,
+      autoDismissAfter: autoDismissAfter,
+    );
+    if (actions != null) {
+      holdForAccessibility =
+          actions.isNotEmpty &&
+          WidgetsBinding
+              .instance
+              .platformDispatcher
+              .accessibilityFeatures
+              .accessibleNavigation;
+    }
+    if (state is ACDToastShowing &&
+        (restartTimer || autoDismissAfter != null)) {
+      _timer?.cancel();
+      _timer = null;
+      _remaining = null;
+      _stopwatch = null;
+      _startAutoDismiss();
+    }
+    onChanged?.call();
   }
 
   /// Freezes the auto-dismiss timer and progress bar at their current
@@ -138,7 +200,7 @@ class ACDToastController {
     _timer = null;
     state = const ACDToastDismissing();
     onChanged?.call();
-    if (timedOut) config.onAutoDismiss?.call();
+    if (timedOut) _guard('onAutoDismiss', config.onAutoDismiss);
 
     if (!immediate && animationController != null) {
       try {
@@ -166,8 +228,28 @@ class ACDToastController {
     animationController = null;
     progressController?.dispose();
     progressController = null;
-    config.onDismissed?.call();
+    // A throwing onDismissed must not strand `closed` or leave this
+    // disposed controller registered with its stack.
+    _guard('onDismissed', config.onDismissed);
     if (!_closed.isCompleted) _closed.complete(_reason);
     onChanged?.call();
+  }
+
+  /// Runs a user callback so an exception is reported (like any framework
+  /// callback error) instead of aborting this lifecycle transition.
+  void _guard(String name, VoidCallback? callback) {
+    if (callback == null) return;
+    try {
+      callback();
+    } catch (error, stack) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stack,
+          library: 'awesome_custom_dialog',
+          context: ErrorDescription("while calling a toast's $name callback"),
+        ),
+      );
+    }
   }
 }

@@ -17,9 +17,13 @@ import 'acd_toast_stack.dart';
 class ACDToastManager {
   ACDToastManager._();
 
-  static final Map<ACDGravity, ValueNotifier<List<ACDToastController>>>
-  _byPosition = {};
-  static final Map<ACDGravity, OverlayEntry> _entries = {};
+  // Stacks are keyed by overlay *and* position: a toast shown under a
+  // different Overlay (an ACDToastLayer, a nested Navigator, a new test
+  // app) gets its own stack there instead of joining one that overlay
+  // doesn't draw.
+  static final Map<_StackKey, ValueNotifier<List<ACDToastController>>> _stacks =
+      {};
+  static final Map<_StackKey, OverlayEntry> _entries = {};
   static final Map<String, ACDToastController> _byId = {};
   static int _counter = 0;
   static ACDToastController? _lastShown;
@@ -49,8 +53,18 @@ class ACDToastManager {
     final ACDGravity position = config.gravity ?? ACDGravity.bottom;
     final String id = config.id ?? _nextId();
 
-    if ((config.dedupeById ?? false) && _byId.containsKey(id)) {
-      return _byId[id]!;
+    final ACDToastController? existing = _byId[id];
+    if ((config.dedupeById ?? false) &&
+        existing != null &&
+        !existing.isDismissing) {
+      // The caller's dismiss wiring (ACDDialog's onDismissed → queue,
+      // showForResult, dismissCallBack) must still run when the toast it
+      // was deduplicated into closes.
+      final VoidCallback? onDismissed = config.onDismissed;
+      if (onDismissed != null) {
+        unawaited(existing.closed.then((_) => onDismissed()));
+      }
+      return existing;
     }
 
     if ((config.cancelPrevious ?? true) &&
@@ -80,18 +94,24 @@ class ACDToastManager {
     _lastShown = controller;
     _observer ??= _ACDToastLifecycleObserver()..attach();
 
-    final ValueNotifier<List<ACDToastController>> list = _byPosition
-        .putIfAbsent(
-          position,
-          () => ValueNotifier<List<ACDToastController>>(<ACDToastController>[]),
-        );
-
-    controller.onChanged = () => _onControllerChanged(position, controller);
+    final _StackKey key = (overlay, position);
+    controller.onChanged = () => _onControllerChanged(key, controller);
 
     void addToList() {
       if (controller.isDismissing) return; // dismissed during its showDelay
+      if (!overlay.mounted) {
+        // The overlay went away during showDelay: nothing can show this.
+        controller.dispose();
+        return;
+      }
+      // Resolved now, not when show() ran: during a showDelay the stack
+      // that existed then may have emptied and been disposed.
+      final ValueNotifier<List<ACDToastController>> list = _stacks.putIfAbsent(
+        key,
+        () => ValueNotifier<List<ACDToastController>>(<ACDToastController>[]),
+      );
       list.value = List.of(list.value)..add(controller);
-      _entries.putIfAbsent(position, () {
+      _entries.putIfAbsent(key, () {
         final OverlayEntry entry = OverlayEntry(
           builder: (_) => ACDToastStack(position: position, listenable: list),
         );
@@ -111,18 +131,33 @@ class ACDToastManager {
   }
 
   static void _onControllerChanged(
-    ACDGravity position,
+    _StackKey key,
     ACDToastController controller,
   ) {
-    final ValueNotifier<List<ACDToastController>>? list = _byPosition[position];
-    if (list == null) return;
-    if (controller.state is ACDToastDisposed) {
+    final bool disposed = controller.state is ACDToastDisposed;
+    // Only unregister the id if it still points at *this* toast — a newer
+    // toast may have reused the id while this one was exiting.
+    if (disposed && identical(_byId[controller.id], controller)) {
       _byId.remove(controller.id);
+    }
+    if (disposed && identical(_lastShown, controller)) _lastShown = null;
+    final ValueNotifier<List<ACDToastController>>? list = _stacks[key];
+    if (list == null) {
+      // Disposed before ever joining a stack (e.g. during its showDelay).
+      if (disposed && _byId.isEmpty) {
+        _observer?.detach();
+        _observer = null;
+      }
+      return;
+    }
+    if (disposed) {
       list.value = list.value.where((c) => c != controller).toList();
       if (list.value.isEmpty) {
-        final OverlayEntry? entry = _entries.remove(position);
-        if (entry != null && entry.mounted) entry.remove();
-        _byPosition.remove(position)?.dispose();
+        final OverlayEntry? entry = _entries.remove(key);
+        // Remove even if the entry hasn't built yet (shown and dismissed in
+        // the same frame) — but never touch an overlay that's gone.
+        if (entry != null && key.$1.mounted) entry.remove();
+        _stacks.remove(key)?.dispose();
       }
       if (_byId.isEmpty) {
         _observer?.detach();
@@ -146,6 +181,30 @@ class ACDToastManager {
   }
 
   static String _nextId() => 'acd_toast_${_counter++}';
+
+  /// Tears down every toast immediately and resets all static state
+  /// ([defaults], ids, stacks). For tests: call it in `tearDown` so a
+  /// toast from one test can't leak into the next.
+  @visibleForTesting
+  static void resetForTest() {
+    for (final ACDToastController c in _byId.values.toList()) {
+      c.dispose();
+    }
+    for (final MapEntry<_StackKey, OverlayEntry> e in _entries.entries) {
+      if (e.key.$1.mounted) e.value.remove();
+    }
+    _entries.clear();
+    for (final ValueNotifier<List<ACDToastController>> n in _stacks.values) {
+      n.dispose();
+    }
+    _stacks.clear();
+    _byId.clear();
+    _lastShown = null;
+    _observer?.detach();
+    _observer = null;
+    _counter = 0;
+    defaults = null;
+  }
 
   /// Dismisses every toast, optionally scoped to [position] — including
   /// ones still waiting on a `showDelay` or queued behind `maxVisible`
@@ -173,11 +232,11 @@ class ACDToastManager {
       _dismissEnd(position, first: false);
 
   static void _dismissEnd(ACDGravity? position, {required bool first}) {
-    final Iterable<ACDGravity> positions = position != null
-        ? [position]
-        : _byPosition.keys.toList();
-    for (final ACDGravity p in positions) {
-      final List<ACDToastController> list = _byPosition[p]?.value ?? const [];
+    for (final MapEntry<_StackKey, ValueNotifier<List<ACDToastController>>>
+        stack
+        in _stacks.entries.toList()) {
+      if (position != null && stack.key.$2 != position) continue;
+      final List<ACDToastController> list = stack.value.value;
       final Iterable<ACDToastController> candidates =
           (first ? list : list.reversed).where((c) => !c.isDismissing);
       if (candidates.isNotEmpty) candidates.first.requestDismiss();
@@ -198,6 +257,9 @@ class ACDToastManager {
   static int activeCount({ACDGravity? position}) =>
       activeToasts(position: position).length;
 }
+
+/// One stack per (overlay, position).
+typedef _StackKey = (OverlayState, ACDGravity);
 
 /// Pauses/resumes every active toast's auto-dismiss timer when the app
 /// leaves/returns to the foreground, so a backgrounded app doesn't silently

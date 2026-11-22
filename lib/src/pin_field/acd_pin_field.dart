@@ -10,6 +10,7 @@ import '../design/acd_design_scope.dart';
 import '../design/acd_design_tokens.dart';
 import '../design/internal/acd_platform_support.dart';
 import 'acd_pin_animation_type.dart';
+import 'acd_pin_controller.dart';
 import 'acd_pin_error_animation.dart';
 import 'acd_pin_field_state.dart';
 import 'acd_pin_theme.dart';
@@ -442,8 +443,11 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
   void initState() {
     super.initState();
     _lastText = _controller.text;
+    _completedFired = _isFull;
     _controller.addListener(_handleTextChanged);
     _focusNode.addListener(_handleFocusChanged);
+    _seedFieldFromController();
+    _attachPinController();
     if (widget.enableCursorAnimation && widget.showCursor) {
       _cursorController = AnimationController(
         vsync: this,
@@ -482,12 +486,46 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
       oldWidget.controller?.removeListener(_handleTextChanged);
       _ownedController?.removeListener(_handleTextChanged);
       _lastText = _controller.text;
+      // A full new controller must not fire onCompleted on its first edit;
+      // a partial one must fire it once it fills.
+      _completedFired = _isFull;
+      _clearReveal();
       _controller.addListener(_handleTextChanged);
+      _seedFieldFromController();
+    } else {
+      // Form.reset() (or any external FormField value change) rebuilds us
+      // with a value the controller doesn't hold yet: push it into the
+      // controller without echoing it back as a user edit.
+      final String fieldText = widget.field.value ?? '';
+      if (fieldText != _controller.text) {
+        _lastText = fieldText;
+        _controller.text = fieldText;
+        _completedFired = fieldText.length >= widget.length;
+        _clearReveal();
+      }
+    }
+    if (widget.length < oldWidget.length &&
+        _controller.text.length > widget.length) {
+      // maxLength only limits new input; trim what's already there (after
+      // this build, as a normal edit so onChanged/validation see it).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _controller.text.length <= widget.length) return;
+        _controller.text = _controller.text.substring(0, widget.length);
+      });
     }
     if (oldWidget.focusNode != widget.focusNode) {
       oldWidget.focusNode?.removeListener(_handleFocusChanged);
       _ownedFocusNode?.removeListener(_handleFocusChanged);
       _focusNode.addListener(_handleFocusChanged);
+    }
+    if (oldWidget.controller != widget.controller ||
+        oldWidget.focusNode != widget.focusNode ||
+        oldWidget.length != widget.length) {
+      final TextEditingController? old = oldWidget.controller;
+      if (old is ACDPinController) {
+        old.detachField(oldWidget.focusNode ?? _ownedFocusNode ?? _focusNode);
+      }
+      _attachPinController();
     }
     final bool wantsCursorAnim =
         widget.enableCursorAnimation && widget.showCursor;
@@ -504,8 +542,16 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
     _syncCursorAnimation();
   }
 
+  /// Lets an [ACDPinController] focus this field and know its length.
+  void _attachPinController() {
+    final TextEditingController? c = widget.controller;
+    if (c is ACDPinController) c.attachField(_focusNode, widget.length);
+  }
+
   @override
   void dispose() {
+    final TextEditingController? pin = widget.controller;
+    if (pin is ACDPinController) pin.detachField(_focusNode);
     _controller.removeListener(_handleTextChanged);
     _focusNode.removeListener(_handleFocusChanged);
     _ownedController?.dispose();
@@ -516,6 +562,27 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
       timer.cancel();
     }
     super.dispose();
+  }
+
+  /// A caller-supplied controller may already hold text the FormField never
+  /// saw — seed the field (post-frame: never mark the parent dirty from a
+  /// child's lifecycle) so `validate()`/`onSaved` see it.
+  void _seedFieldFromController() {
+    final String text = _controller.text;
+    if (text.isEmpty || widget.field.value == text) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.field.value != _controller.text) {
+        widget.field.didChange(_controller.text);
+      }
+    });
+  }
+
+  void _clearReveal() {
+    for (final Timer timer in _revealTimers.values) {
+      timer.cancel();
+    }
+    _revealTimers.clear();
+    _revealedIndices.clear();
   }
 
   void _handleTextChanged() {
@@ -552,6 +619,7 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
   }
 
   void _fireHaptic() {
+    if (!ACDHaptics.enabled(context)) return; // ACDDesignScope master switch
     switch (widget.hapticFeedbackType) {
       case ACDHapticFeedbackType.disabled:
         break;
@@ -589,12 +657,20 @@ class _ACDPinFieldRendererState extends State<_ACDPinFieldRenderer>
 
   Future<void> _maybeCheckClipboard() async {
     if (widget.onClipboardFound == null) return;
-    final ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
-    final String? text = data?.text?.trim();
+    final ClipboardData? data;
+    try {
+      data = await Clipboard.getData(Clipboard.kTextPlain);
+    } catch (_) {
+      return; // e.g. clipboard permission denied on web
+    }
+    // Codes are often copied with grouping ("123-456", "123 456").
+    final String? text = data?.text?.replaceAll(_codeSeparators, '');
     if (text != null && text.length == widget.length && mounted) {
       widget.onClipboardFound!(text);
     }
   }
+
+  static final RegExp _codeSeparators = RegExp(r'[\s\-\u2013\u2014._]');
 
   void _requestFocus() {
     if (!widget.enabled || widget.readOnly) return;

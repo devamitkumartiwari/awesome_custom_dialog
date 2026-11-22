@@ -1,25 +1,21 @@
 # awesome_custom_dialog example
 
-A showcase app demonstrating every feature of the [awesome_custom_dialog](https://pub.dev/packages/awesome_custom_dialog) package. Run it with:
+A small showcase app with one screen per feature of
+[awesome_custom_dialog](https://pub.dev/packages/awesome_custom_dialog).
 
 ```sh
 flutter run
 ```
 
-The home screen lists one category per feature area — tap into any of them to see live, interactive demos:
+Use the app bar to switch the theme (light / dark / system) and the design
+(Material / Cupertino / Adaptive). Every screen follows the switch.
 
-- **Presets & Feedback** — Success, Error, Warning, and Info dialogs.
-- **Buttons & Actions** — One/two/three button layouts, including the customizable background color, shape, elevation, icon, and gradient options.
-- **Inputs & Menus** — Text fields, lists, radio buttons, checkboxes, and progress spinners.
-- **Searchable List** — Filterable single/multi-select lists, local or async search.
-- **Dropdown Field** — `ACDDropdownField`/`ACDMultiDropdownField`, opening as a dialog, bottom sheet, or anchored menu.
-- **Animations** — Fade, scale, bounce, slide, and rotate transitions.
-- **Positioning & Misc** — Bottom drawer, top banner, side panel, and dialog queueing.
-- **Toast** — Auto-dismissing toast messages.
-- **Snackbar** — Colorful success/failure/warning/help banners.
-- **Autocomplete** — `ACDAutocompleteField` typeahead and `ACDTriggerAutocompleteField` `@mention`/`#hashtag` triggers.
-- **Slide to Confirm** — `ACDSlideAction`, its `.swipeButton` preset, and a full styling gallery.
-- **Dashed & Dotted** — `ACDDashedLine`, `ACDDottedDecoration`, and `ACDDashedBorder`.
-- **Stepper** — `ACDStepper` (wizard/timeline) and `ACDStepperListView`.
+| Section | Screens |
+|---|---|
+| Dialogs | Presets & loading · Dialog content · Position & style · Bottom sheet · Searchable list |
+| Messages | Toast · Snackbar |
+| Form fields | Dropdown · Autocomplete · PIN / OTP |
+| Controls & motion | Slide to confirm · Switch · Rating bar · Stepper · Progress · Motion · Animated text · Staggered lists · Dashed & dotted |
 
-Each screen's source lives under [`lib/screens/`](lib/screens/) and mirrors the usage examples in the main package [README](../README.md).
+Each screen is one file in [`lib/screens/`](lib/screens/). Its "View code" panel shows the same snippet as the main
+[README](../README.md).

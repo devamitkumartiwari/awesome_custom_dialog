@@ -1,4 +1,5 @@
 export 'acd_animation.dart' show ACDAnimation;
+export 'acd_async_feedback.dart' show ACDLoadingCanceled;
 export 'acd_children.dart';
 export 'acd_content_type.dart';
 export 'acd_dialog.dart' show ACDDialog;

@@ -1,12 +1,11 @@
-import 'dart:async' show unawaited;
+import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/physics.dart';
 
 import '../design/internal/acd_physics.dart';
-
-import 'package:flutter/services.dart';
 
 import '../design/acd_design.dart';
 import '../design/acd_design_tokens.dart';
@@ -100,6 +99,7 @@ class ACDSlideAction extends StatefulWidget {
     this.successColor,
     this.loadingWidget,
     this.hapticFeedbackOnSuccess = true,
+    this.autoResetAfter,
     this.onSlideChanged,
     this.foregroundBuilder,
     this.backgroundBuilder,
@@ -144,6 +144,7 @@ class ACDSlideAction extends StatefulWidget {
     String? label,
     TextStyle? labelTextStyle,
     bool enabled = true,
+    Duration? autoResetAfter,
   }) : this(
          key: key,
          onConfirm: onConfirm,
@@ -164,6 +165,7 @@ class ACDSlideAction extends StatefulWidget {
          label: label,
          labelTextStyle: labelTextStyle,
          enabled: enabled,
+         autoResetAfter: autoResetAfter,
        );
 
   /// Fired once a drag crosses [dismissThreshold] and is released. Typically
@@ -350,9 +352,16 @@ class ACDSlideAction extends StatefulWidget {
   /// Defaults to a small [CircularProgressIndicator].
   final Widget? loadingWidget;
 
-  /// Whether to trigger [HapticFeedback.lightImpact] once
+  /// Whether to trigger a light haptic (honouring `ACDDesignScope.hapticsEnabled`) once
   /// [ACDSlideActionStatus.success] is reached.
   final bool hapticFeedbackOnSuccess;
+
+  /// After a confirm, slides the thumb back and re-arms the action once
+  /// this much time has passed (also resetting a [controller] that is in
+  /// `loading`/`success`). `null` (the default) keeps it confirmed until
+  /// [ACDSlideActionController.reset] is called — without a [controller]
+  /// that means the action confirms exactly once.
+  final Duration? autoResetAfter;
 
   /// Fires continuously during a drag with the signed progress
   /// (`-1.0`–`1.0`).
@@ -397,6 +406,16 @@ class _ACDSlideActionState extends State<ACDSlideAction>
   /// drives [ACDSlideAction.activeThumbColor]/[ACDSlideAction.activeTrackColor].
   bool _dragging = false;
 
+  /// Set once [ACDSlideAction.onConfirm] fires; blocks a second confirm
+  /// (a tiny drag at the end, or the screen-reader/keyboard activate) until
+  /// the controller is reset or [ACDSlideAction.autoResetAfter] elapses.
+  bool _confirmed = false;
+  Timer? _autoResetTimer;
+
+  /// The last laid-out travel, to re-snap a confirmed thumb when it changes
+  /// (first layout, rotation, resize).
+  double? _laidOutExtent;
+
   ACDSlideActionController get _controller =>
       widget.controller ?? (_ownedController ??= ACDSlideActionController());
 
@@ -439,6 +458,7 @@ class _ACDSlideActionState extends State<ACDSlideAction>
     _extent.dispose();
     _shimmerController?.dispose();
     _ownedController?.dispose();
+    _autoResetTimer?.cancel();
     super.dispose();
   }
 
@@ -457,12 +477,14 @@ class _ACDSlideActionState extends State<ACDSlideAction>
           _animateTo(_confirmedExtent(), widget.animationDuration).then((
             completed,
           ) {
-            if (completed && widget.hapticFeedbackOnSuccess) {
-              HapticFeedback.lightImpact();
+            if (completed && mounted && widget.hapticFeedbackOnSuccess) {
+              ACDHaptics.light(context);
             }
           }),
         );
       case ACDSlideActionStatus.idle:
+        _confirmed = false;
+        _autoResetTimer?.cancel();
         unawaited(_animateTo(0, widget.animationDuration));
       case ACDSlideActionStatus.dragging:
         break;
@@ -526,8 +548,27 @@ class _ACDSlideActionState extends State<ACDSlideAction>
     }
   }
 
+  void _fireConfirm() {
+    if (_confirmed) return;
+    _confirmed = true;
+    widget.onConfirm();
+    final Duration? after = widget.autoResetAfter;
+    if (after == null) return;
+    _autoResetTimer?.cancel();
+    _autoResetTimer = Timer(after, () {
+      if (!mounted) return;
+      if (_controller.status == ACDSlideActionStatus.idle) {
+        setState(() => _confirmed = false);
+        unawaited(_animateTo(0, widget.animationDuration));
+      } else {
+        _controller.reset(); // listener re-arms and slides back
+      }
+    });
+  }
+
   bool get _interactive =>
       widget.enabled &&
+      !_confirmed &&
       (_controller.status == ACDSlideActionStatus.idle ||
           _controller.status == ACDSlideActionStatus.dragging);
 
@@ -582,7 +623,7 @@ class _ACDSlideActionState extends State<ACDSlideAction>
         // Carry a flick that points the right way; ignore a reversed one.
         velocity * sign > 0 ? velocity : 0,
       );
-      if (completed) widget.onConfirm();
+      if (completed) _fireConfirm();
     } else if (velocity == 0) {
       await _animateTo(0, widget.snapBackDuration);
     } else {
@@ -596,7 +637,7 @@ class _ACDSlideActionState extends State<ACDSlideAction>
       _confirmedExtent(),
       widget.animationDuration,
     );
-    if (completed) widget.onConfirm();
+    if (completed) _fireConfirm();
   }
 
   @override
@@ -633,14 +674,38 @@ class _ACDSlideActionState extends State<ACDSlideAction>
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final double totalWidth =
+        final double requested =
             widget.width ??
             (widget.stretchToFill ? constraints.maxWidth : 280.0);
+        // Inside a Row/horizontal list `maxWidth` is unbounded; a
+        // SizedBox(width: infinity) would throw, so fall back to the
+        // intrinsic default instead.
+        final double totalWidth = requested.isFinite ? requested : 280.0;
         final double insetWidth = totalWidth - widget.trackPadding.horizontal;
         final double insetHeight = widget.height - widget.trackPadding.vertical;
         final double thumbSize =
             widget.thumbSize ?? insetHeight - widget.thumbPadding * 2;
-        _trackExtent = (insetWidth - thumbSize - 8).clamp(1.0, double.infinity);
+        final double fullTravel = (insetWidth - thumbSize - 8).clamp(
+          1.0,
+          double.infinity,
+        );
+        // `dual` starts centred, so each side only has half the travel.
+        _trackExtent = widget.direction == ACDSlideActionDirection.dual
+            ? math.max(1.0, fullTravel / 2)
+            : fullTravel;
+        if (_laidOutExtent != _trackExtent) {
+          _laidOutExtent = _trackExtent;
+          // A status set before the first layout (or a resize) animated to
+          // a stale extent: land a confirmed thumb on the real end.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || _dragging || _extent.isAnimating) return;
+            final bool atEnd =
+                _confirmed ||
+                _controller.status == ACDSlideActionStatus.loading ||
+                _controller.status == ACDSlideActionStatus.success;
+            if (atEnd) _extent.value = _confirmedExtent();
+          });
+        }
 
         // Only this subtree follows the thumb frame-by-frame.
         final Widget content = AnimatedBuilder(
@@ -839,8 +904,10 @@ class _ACDSlideActionState extends State<ACDSlideAction>
           child: thumbChild,
         );
       case ACDSlideActionDirection.dual:
-        positioned = Positioned(
-          left: insetWidth / 2 - thumbSize / 2 + _dragExtent,
+        // Directional: _dragExtent is in reading direction (the drag delta
+        // is negated under RTL), so `start` keeps the thumb under the finger.
+        positioned = PositionedDirectional(
+          start: insetWidth / 2 - thumbSize / 2 + _dragExtent,
           top: (insetHeight - thumbSize) / 2,
           child: thumbChild,
         );
@@ -972,9 +1039,14 @@ class _ACDWaveTrailPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (dragExtent == 0) return;
     final double midY = size.height / 2;
-    final double startX = direction == ACDSlideActionDirection.endToStart
-        ? size.width - thumbSize / 2 - 4
-        : thumbSize / 2 + 4;
+    // The thumb's resting centre in reading direction, then mirrored to a
+    // physical x under RTL (the thumb uses directional positioning).
+    final double logicalStart = switch (direction) {
+      ACDSlideActionDirection.startToEnd => thumbSize / 2 + 4,
+      ACDSlideActionDirection.endToStart => size.width - thumbSize / 2 - 4,
+      ACDSlideActionDirection.dual => size.width / 2,
+    };
+    final double startX = rtl ? size.width - logicalStart : logicalStart;
     final double endX = startX + (rtl ? -dragExtent : dragExtent);
 
     final Path path = Path()..moveTo(startX, midY);
@@ -999,5 +1071,10 @@ class _ACDWaveTrailPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _ACDWaveTrailPainter oldDelegate) =>
-      oldDelegate.dragExtent != dragExtent || oldDelegate.color != color;
+      oldDelegate.dragExtent != dragExtent ||
+      oldDelegate.trackExtent != trackExtent ||
+      oldDelegate.thumbSize != thumbSize ||
+      oldDelegate.rtl != rtl ||
+      oldDelegate.direction != direction ||
+      oldDelegate.color != color;
 }

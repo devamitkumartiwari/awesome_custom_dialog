@@ -52,7 +52,7 @@ Function(Widget, Animation<double>) acdPresetAnimFn(
         scale: Tween(
           begin: 0.0,
           end: 1.0,
-        ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutBack)),
+        ).animate(anim.drive(CurveTween(curve: Curves.easeOutBack))),
         child: child,
       );
 
@@ -61,43 +61,51 @@ Function(Widget, Animation<double>) acdPresetAnimFn(
         scale: Tween(
           begin: 0.0,
           end: 1.0,
-        ).animate(CurvedAnimation(parent: anim, curve: Curves.bounceOut)),
+        ).animate(anim.drive(CurveTween(curve: Curves.bounceOut))),
         child: child,
       );
 
     case ACDAnimation.slideUp:
       return (child, anim) => SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, 1),
-          end: Offset.zero,
-        ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+        position: anim.drive(
+          Tween<Offset>(
+            begin: const Offset(0, 1),
+            end: Offset.zero,
+          ).chain(CurveTween(curve: Curves.easeOut)),
+        ),
         child: child,
       );
 
     case ACDAnimation.slideDown:
       return (child, anim) => SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, -1),
-          end: Offset.zero,
-        ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+        position: anim.drive(
+          Tween<Offset>(
+            begin: const Offset(0, -1),
+            end: Offset.zero,
+          ).chain(CurveTween(curve: Curves.easeOut)),
+        ),
         child: child,
       );
 
     case ACDAnimation.slideLeft:
       return (child, anim) => SlideTransition(
-        position: Tween<Offset>(
-          begin: Offset(rtl ? -1 : 1, 0),
-          end: Offset.zero,
-        ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+        position: anim.drive(
+          Tween<Offset>(
+            begin: Offset(rtl ? -1 : 1, 0),
+            end: Offset.zero,
+          ).chain(CurveTween(curve: Curves.easeOut)),
+        ),
         child: child,
       );
 
     case ACDAnimation.slideRight:
       return (child, anim) => SlideTransition(
-        position: Tween<Offset>(
-          begin: Offset(rtl ? 1 : -1, 0),
-          end: Offset.zero,
-        ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+        position: anim.drive(
+          Tween<Offset>(
+            begin: Offset(rtl ? 1 : -1, 0),
+            end: Offset.zero,
+          ).chain(CurveTween(curve: Curves.easeOut)),
+        ),
         child: child,
       );
 
@@ -106,7 +114,7 @@ Function(Widget, Animation<double>) acdPresetAnimFn(
         turns: Tween(
           begin: 0.0,
           end: 1.0,
-        ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+        ).animate(anim.drive(CurveTween(curve: Curves.easeOut))),
         child: child,
       );
 

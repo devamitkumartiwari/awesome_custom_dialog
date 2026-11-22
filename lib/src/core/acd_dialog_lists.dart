@@ -74,7 +74,7 @@ extension ACDDialogLists on ACDDialog {
                       : acdEnsureMaterial(
                           context,
                           Material(
-                            color: tileColor ?? Colors.white,
+                            color: tileColor ?? acdMaterialSurface(context),
                             child: ListTile(
                               onTap: onTap,
                               // BUG: defaulting to EdgeInsets.zero left

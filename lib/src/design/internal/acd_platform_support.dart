@@ -13,22 +13,23 @@ bool acdReduceMotion(BuildContext context) =>
 
 /// Package haptics, honouring [ACDDesignScope.hapticsEnabled].
 abstract final class ACDHaptics {
-  static bool _enabled(BuildContext context) =>
+  /// Whether package haptics are on at [context] (the master switch).
+  static bool enabled(BuildContext context) =>
       ACDDesignScope.maybeOf(context)?.hapticsEnabled ?? true;
 
   /// A selection tick (toggles, steps, picking an item).
   static void selection(BuildContext context) {
-    if (_enabled(context)) HapticFeedback.selectionClick();
+    if (enabled(context)) HapticFeedback.selectionClick();
   }
 
   /// A light impact (confirmations).
   static void light(BuildContext context) {
-    if (_enabled(context)) HapticFeedback.lightImpact();
+    if (enabled(context)) HapticFeedback.lightImpact();
   }
 
   /// A heavier impact (errors, warnings).
   static void heavy(BuildContext context) {
-    if (_enabled(context)) HapticFeedback.heavyImpact();
+    if (enabled(context)) HapticFeedback.heavyImpact();
   }
 }
 
@@ -74,4 +75,24 @@ Widget acdEnsureMaterial(BuildContext context, Widget child) {
           );
   }
   return result;
+}
+
+/// The Material default for a card/row surface: the original
+/// `Colors.white` in light mode (pixel-identical to before), the theme's
+/// raised surface in dark mode — where white made light theme text
+/// unreadable.
+Color acdMaterialSurface(BuildContext context) {
+  final ThemeData theme = Theme.of(context);
+  return theme.brightness == Brightness.dark
+      ? theme.colorScheme.surfaceContainerHigh
+      : Colors.white;
+}
+
+/// The Material default for text on [acdMaterialSurface]: the original
+/// `Colors.black` in light mode, the theme's `onSurface` in dark mode.
+Color acdMaterialOnSurface(BuildContext context) {
+  final ThemeData theme = Theme.of(context);
+  return theme.brightness == Brightness.dark
+      ? theme.colorScheme.onSurface
+      : Colors.black;
 }

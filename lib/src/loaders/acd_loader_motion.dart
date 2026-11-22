@@ -181,16 +181,18 @@ class _ACDLinearMotionPainter extends CustomPainter {
     final double stroke = math.max(2.0, h - 2 * amplitude);
     const double wavelength = 40;
     final double phase = clock.value * 2 * math.pi;
-    final Path path = Path();
-    for (double x = from; x <= to; x += 1) {
-      final double y =
-          h / 2 + amplitude * math.sin(2 * math.pi * x / wavelength - phase);
-      if (x == from) {
-        path.moveTo(x, y);
-      } else {
-        path.lineTo(x, y);
-      }
+    // An unbounded width would never terminate the sampling loop below.
+    if (!from.isFinite || !to.isFinite || to <= from) return;
+    double waveY(double x) =>
+        h / 2 + amplitude * math.sin(2 * math.pi * x / wavelength - phase);
+    // 2 px samples are visually identical to 1 px for a 40 px wavelength
+    // and halve the per-frame path work.
+    const double sampleStep = 2;
+    final Path path = Path()..moveTo(from, waveY(from));
+    for (double x = from + sampleStep; x < to; x += sampleStep) {
+      path.lineTo(x, waveY(x));
     }
+    path.lineTo(to, waveY(to));
     canvas.drawPath(
       path,
       active

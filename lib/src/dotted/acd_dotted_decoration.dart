@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:material_ui/material_ui.dart';
 
 import '../dashed/acd_dash_path.dart';
@@ -56,6 +57,35 @@ class ACDDottedDecoration extends Decoration {
   @override
   BoxPainter createBoxPainter([VoidCallback? onChanged]) =>
       _ACDDottedBoxPainter(this, onChanged);
+
+  // Value equality: RenderDecoratedBox repaints whenever the decoration is
+  // not ==, so a non-const decoration rebuilt with the same values must
+  // compare equal (dashPattern by contents, not by list identity).
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is ACDDottedDecoration &&
+        other.shape == shape &&
+        other.linePosition == linePosition &&
+        other.borderRadius == borderRadius &&
+        other.color == color &&
+        other.gradient == gradient &&
+        other.strokeWidth == strokeWidth &&
+        listEquals(other.dashPattern, dashPattern) &&
+        other.roundedCaps == roundedCaps;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    shape,
+    linePosition,
+    borderRadius,
+    color,
+    gradient,
+    strokeWidth,
+    Object.hashAll(dashPattern),
+    roundedCaps,
+  );
 }
 
 class _ACDDottedBoxPainter extends BoxPainter {

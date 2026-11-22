@@ -5,6 +5,8 @@ import '../design/acd_design.dart';
 import '../design/acd_design_tokens.dart';
 import '../design/internal/acd_adaptive_widgets.dart';
 import '../design/internal/acd_platform_support.dart';
+import '../design/acd_design_scope.dart';
+import '../design/acd_strings.dart';
 
 import 'acd_dialog.dart';
 
@@ -14,9 +16,9 @@ extension ACDDialogPresets on ACDDialog {
   /// A ready-made success dialog (green check icon). Returns this dialog
   /// for chaining.
   ACDDialog success({
-    String title = 'Success',
+    String? title,
     String? message,
-    String buttonText = 'OK',
+    String? buttonText,
     VoidCallback? onTap,
     IconData? icon,
     Color? iconColor,
@@ -51,9 +53,9 @@ extension ACDDialogPresets on ACDDialog {
   /// A ready-made error dialog (red cancel icon). Returns this dialog for
   /// chaining.
   ACDDialog error({
-    String title = 'Error',
+    String? title,
     String? message,
-    String buttonText = 'OK',
+    String? buttonText,
     VoidCallback? onTap,
     IconData? icon,
     Color? iconColor,
@@ -88,9 +90,9 @@ extension ACDDialogPresets on ACDDialog {
   /// A ready-made warning dialog (orange warning icon). Returns this dialog
   /// for chaining.
   ACDDialog warning({
-    String title = 'Warning',
+    String? title,
     String? message,
-    String buttonText = 'OK',
+    String? buttonText,
     VoidCallback? onTap,
     IconData? icon,
     Color? iconColor,
@@ -125,9 +127,9 @@ extension ACDDialogPresets on ACDDialog {
   /// A ready-made info dialog (blue info icon). Returns this dialog for
   /// chaining.
   ACDDialog info({
-    String title = 'Info',
+    String? title,
     String? message,
-    String buttonText = 'OK',
+    String? buttonText,
     VoidCallback? onTap,
     IconData? icon,
     Color? iconColor,
@@ -164,9 +166,9 @@ extension ACDDialogPresets on ACDDialog {
     required IconData? icon,
     required Color? iconColor,
     double iconSize = 52,
-    required String title,
+    required String? title,
     String? message,
-    required String buttonText,
+    required String? buttonText,
     VoidCallback? onTap,
     EdgeInsets? padding,
     Color? titleColor,
@@ -205,16 +207,23 @@ extension ACDDialogPresets on ACDDialog {
 }
 
 enum _ACDPresetKind {
-  success(ACDIcon.success, Color(0xFF4CAF50), 'Success'),
-  error(ACDIcon.error, Color(0xFFF44336), 'Error'),
-  warning(ACDIcon.warning, Color(0xFFFF9800), 'Warning'),
-  info(ACDIcon.info, Color(0xFF2196F3), 'Information');
+  success(ACDIcon.success, Color(0xFF4CAF50)),
+  error(ACDIcon.error, Color(0xFFF44336)),
+  warning(ACDIcon.warning, Color(0xFFFF9800)),
+  info(ACDIcon.info, Color(0xFF2196F3));
 
-  const _ACDPresetKind(this.icon, this.materialColor, this.semanticLabel);
+  const _ACDPresetKind(this.icon, this.materialColor);
 
   final ACDIcon icon;
   final Color materialColor;
-  final String semanticLabel;
+
+  /// The localized default title (also the icon's semantic label).
+  String title(ACDStrings strings) => switch (this) {
+    _ACDPresetKind.success => strings.successTitle,
+    _ACDPresetKind.error => strings.errorTitle,
+    _ACDPresetKind.warning => strings.warningTitle,
+    _ACDPresetKind.info => strings.infoTitle,
+  };
 
   Color cupertinoColor(ACDDesignTokens tokens) => switch (this) {
     _ACDPresetKind.success => tokens.success,
@@ -250,9 +259,13 @@ class _ACDPresetBody extends StatefulWidget {
   final IconData? icon;
   final Color? iconColor;
   final double iconSize;
-  final String title;
+
+  /// `null` → the kind's [ACDStrings] title.
+  final String? title;
   final String? message;
-  final String buttonText;
+
+  /// `null` → [ACDStrings.ok].
+  final String? buttonText;
   final VoidCallback onPressed;
   final EdgeInsets? padding;
   final Color? titleColor;
@@ -290,6 +303,10 @@ class _ACDPresetBodyState extends State<_ACDPresetBody> {
   Widget build(BuildContext context) {
     final ACDResolvedDesign design = widget.dialog.resolveDesign(context);
     final bool cupertino = design.isCupertino;
+    final ACDStrings strings = ACDDesignScope.stringsOf(context);
+    final String kindTitle = widget.kind.title(strings);
+    final String title = widget.title ?? kindTitle;
+    final String buttonText = widget.buttonText ?? strings.ok;
     // Material warning uses the contrast-safe token (the old #FF9800 was
     // ~2.2:1 on a light surface); the other Material presets keep their hue.
     final bool needsTokens = cupertino || widget.kind == _ACDPresetKind.warning;
@@ -310,7 +327,7 @@ class _ACDPresetBodyState extends State<_ACDPresetBody> {
           style: widget.buttonTextStyle != null
               ? TextButton.styleFrom(textStyle: widget.buttonTextStyle)
               : null,
-          child: Text(widget.buttonText),
+          child: Text(buttonText),
         ),
       ),
       // iOS alert: a single bold default action above a hairline.
@@ -322,7 +339,7 @@ class _ACDPresetBodyState extends State<_ACDPresetBody> {
           onPressed: widget.onPressed,
           minimumSize: const Size(44, 44),
           child: Text(
-            widget.buttonText,
+            buttonText,
             style: const TextStyle(fontWeight: FontWeight.w600)
                 .merge(widget.buttonTextStyle)
                 .copyWith(color: tokens.primary),
@@ -344,13 +361,13 @@ class _ACDPresetBodyState extends State<_ACDPresetBody> {
             widget.icon ?? widget.kind.icon.of(design),
             color: iconColor,
             size: widget.iconSize,
-            semanticLabel: widget.kind.semanticLabel,
+            semanticLabel: kindTitle,
           ),
           const SizedBox(height: 14),
           Semantics(
             header: true,
             child: Text(
-              widget.title,
+              title,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: cupertino ? 17 : widget.titleFontSize,

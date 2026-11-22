@@ -3,3 +3,17 @@
 # field's raw-content URLs, but they don't need to ship inside the published
 # package tarball.
 /doc/
+
+# A .pubignore replaces .gitignore for publishing, so the usual build and
+# editor artifacts must be listed here too or they ship in the tarball.
+build/
+example/build/
+.dart_tool/
+example/.dart_tool/
+.idea/
+.vscode/
+.metadata
+pubspec.lock
+# Internal notes and the unused SPM scaffold (this package has no native code).
+ANALYSIS.md
+/ios/

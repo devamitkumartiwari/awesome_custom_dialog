@@ -1,6 +1,6 @@
 import 'package:awesome_custom_dialog/awesome_custom_dialog.dart';
 import 'package:awesome_custom_dialog_example/app_settings.dart';
-import 'package:awesome_custom_dialog_example/screens/switch/basics_screen.dart';
+import 'package:awesome_custom_dialog_example/screens/switch_screen.dart';
 import 'package:awesome_custom_dialog_example/widgets/design_switcher.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,12 +24,12 @@ void main() {
   });
 
   ACDResolvedDesign resolvedAt(WidgetTester tester) =>
-      ACDDesign.resolve(tester.element(find.byType(SwitchBasicsScreen)));
+      ACDDesign.resolve(tester.element(find.byType(SwitchScreen)));
 
   testWidgets('demo screens show the switcher and it changes the design', (
     tester,
   ) async {
-    await tester.pumpWidget(_app(const SwitchBasicsScreen()));
+    await tester.pumpWidget(_app(const SwitchScreen()));
     expect(find.byType(DesignSwitcherButton), findsOneWidget);
     expect(find.text('Material'), findsOneWidget);
     expect(resolvedAt(tester), ACDResolvedDesign.material);
@@ -45,7 +45,7 @@ void main() {
 
   testWidgets('adaptive follows the platform preview', (tester) async {
     designNotifier.value = ACDDesign.adaptive;
-    await tester.pumpWidget(_app(const SwitchBasicsScreen()));
+    await tester.pumpWidget(_app(const SwitchScreen()));
     expect(resolvedAt(tester), ACDResolvedDesign.material);
     expect(find.text('Auto · M3'), findsOneWidget);
 

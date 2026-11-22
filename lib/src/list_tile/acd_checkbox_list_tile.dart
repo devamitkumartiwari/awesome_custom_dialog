@@ -188,7 +188,7 @@ class _ACDCheckboxListTileState extends State<ACDCheckboxListTile> {
                   fontSize: item.fontSize ?? 14,
                   fontWeight: item.fontWeight ?? FontWeight.normal,
                   fontFamily: item.fontFamily,
-                  color: item.color ?? Colors.black,
+                  color: item.color ?? acdMaterialOnSurface(context),
                 ).merge(item.style),
               ),
               value: _selected.contains(index),

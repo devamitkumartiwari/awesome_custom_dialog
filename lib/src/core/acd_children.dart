@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:material_ui/material_ui.dart';
 
@@ -91,8 +93,13 @@ class _ACDChildrenState extends State<ACDChildren> {
 
   @override
   void dispose() {
-    // BUG-09: always fires — covers barrier tap AND programmatic dismiss
-    widget.onDismissed?.call();
+    // BUG-09: always fires — covers barrier tap AND programmatic dismiss.
+    // Deferred to a microtask: dispose runs while the element tree is
+    // locked, so a callback calling setState (the common
+    // `dismissCallBack = () => setState(...)`) would throw here — and a
+    // throwing callback must never skip super.dispose().
+    final VoidCallback? onDismissed = widget.onDismissed;
+    if (onDismissed != null) scheduleMicrotask(onDismissed);
     super.dispose();
   }
 }

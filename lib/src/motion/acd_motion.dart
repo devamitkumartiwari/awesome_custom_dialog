@@ -1,7 +1,6 @@
 import 'dart:async' show Completer, Timer, unawaited;
 
 import 'package:material_ui/material_ui.dart';
-import 'package:flutter/services.dart';
 
 import '../design/internal/acd_platform_support.dart';
 import 'acd_motion_effect.dart';
@@ -309,7 +308,7 @@ class _ACDMotionState extends State<ACDMotion> with TickerProviderStateMixin {
   }
 
   void _handleTap() {
-    if (widget.hapticFeedbackOnTap) HapticFeedback.lightImpact();
+    if (widget.hapticFeedbackOnTap) ACDHaptics.light(context);
     // Play the tap effect exactly once per tap; when deferring, chain the
     // callback onto that same run (previously a second, restarting run was
     // started, so the effect visibly played twice).

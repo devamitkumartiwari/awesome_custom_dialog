@@ -24,7 +24,9 @@ class ACDDashedLine extends StatelessWidget {
     this.gradient,
     this.roundedCaps = false,
     this.useRepaintBoundary = true,
-  });
+  }) : assert(dashLength > 0, 'dashLength must be positive'),
+       assert(gapLength >= 0, 'gapLength must not be negative'),
+       assert(thickness >= 0, 'thickness must not be negative');
 
   /// Whether the line runs horizontally or vertically.
   final Axis axis;

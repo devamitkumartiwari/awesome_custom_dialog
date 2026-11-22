@@ -5,6 +5,8 @@ import 'package:material_ui/material_ui.dart';
 
 import '../design/acd_design.dart';
 import '../design/acd_design_scope.dart';
+import '../design/acd_design_tokens.dart';
+import '../design/acd_strings.dart';
 import '../design/internal/acd_adaptive_widgets.dart';
 import '../design/internal/acd_platform_support.dart';
 import 'acd_search_state.dart';
@@ -51,12 +53,17 @@ class ACDSearchableListTile<T> extends StatefulWidget {
     this.searchController,
     this.dialogDismiss,
     this.showConfirmCancelButtons = true,
-    this.confirmText = 'OK',
-    this.cancelText = 'Cancel',
+    this.confirmText,
+    this.cancelText,
     this.confirmColor,
     this.cancelColor,
     this.confirmFontWeight,
     this.checkboxActiveColor,
+    this.maxSelection,
+    this.showSelectAll = false,
+    this.groupBy,
+    this.cacheResults = false,
+    this.onCreate,
     this.compareFn,
     this.isDisabledItem,
     this.favoriteItems,
@@ -178,10 +185,10 @@ class ACDSearchableListTile<T> extends StatefulWidget {
   final bool showConfirmCancelButtons;
 
   /// Confirm button label (multi-select only).
-  final String confirmText;
+  final String? confirmText;
 
   /// Cancel button label (multi-select only).
-  final String cancelText;
+  final String? cancelText;
 
   /// Confirm button color (multi-select only).
   final Color? confirmColor;
@@ -203,15 +210,36 @@ class ACDSearchableListTile<T> extends StatefulWidget {
   /// Marks individual rows as non-interactive (dimmed, ignores taps).
   final bool Function(T item)? isDisabledItem;
 
+  /// Multi-select: the most items that can be selected. Once reached, the
+  /// remaining rows are disabled until something is deselected.
+  final int? maxSelection;
+
+  /// Multi-select: a "Select all" row above the list that toggles every
+  /// visible, enabled row (up to [maxSelection]).
+  final bool showSelectAll;
+
+  /// Groups rows under section headers, in the order groups first appear.
+  /// Rows of one group should be contiguous in [items] for a tidy list.
+  final String Function(T item)? groupBy;
+
+  /// Caches [onFind] results per query, so retyping or going back to an
+  /// earlier query doesn't hit the network again. The cache lives as long
+  /// as this list (one popup).
+  final bool cacheResults;
+
+  /// Offers a "Create "query"" row when a search finds nothing. Return the
+  /// new item (e.g. after saving it) to select it, or `null` to cancel.
+  final Future<T?> Function(String query)? onCreate;
+
   /// Shown pinned at the top of the idle (pre-search) list, ahead of
   /// [items] — cleared once a search query narrows the list.
   final List<T>? favoriteItems;
 
   /// Paginated async search/load: called with the current query and a
   /// zero-based page number, first for the idle (empty-query) page and
-  /// again for each page after as the list is scrolled to its end. Returning
-  /// fewer results than requested — including an empty list — marks the end
-  /// of the data. When set, this supersedes both [items] and [onFind]
+  /// again for each page after as the list is scrolled to its end (or right
+  /// away, while the loaded rows don't fill the viewport yet). Returning an
+  /// empty list marks the end of the data. A failed page shows a retry row. When set, this supersedes both [items] and [onFind]
   /// entirely (idle state is just page 0 of an empty query).
   final Future<List<T>> Function(String keyword, int page)? onFindPaged;
 
@@ -232,6 +260,13 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
   T? _selectedValue;
   Timer? _debounce;
   int _searchGeneration = 0;
+  final Map<String, List<T>> _cache = <String, List<T>>{};
+  bool _creating = false;
+
+  bool get _atMaxSelection =>
+      widget.multiple &&
+      widget.maxSelection != null &&
+      _selected.length >= widget.maxSelection!;
   bool _ownsSearchController = false;
 
   String _labelOf(T item) => widget.itemAsString?.call(item) ?? item.toString();
@@ -248,6 +283,15 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
   int _page = 0;
   bool _hasMore = true;
   bool _loadingMore = false;
+
+  /// The last load-more failed: stop auto-loading on scroll (which would
+  /// re-fire the failing request on every scroll update) until the user
+  /// taps retry.
+  bool _loadMoreFailed = false;
+
+  /// The query the current results belong to, so caret/selection-only
+  /// controller notifications don't re-run the search.
+  late String _lastQuery;
   ScrollController? _paginationController;
   bool _ownsPaginationController = false;
 
@@ -265,6 +309,7 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
       _searchController = TextEditingController();
       _ownsSearchController = true;
     }
+    _lastQuery = _searchController.text;
     _searchController.addListener(_onQueryChanged);
     if (_paginating) {
       if (widget.controller != null) {
@@ -275,6 +320,22 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
       }
       _paginationController!.addListener(_maybeLoadMore);
       _loadPage(query: '', reset: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ACDSearchableListTile<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // New local data while the popup is open: refresh what's on screen.
+    if (_paginating) return;
+    if (!identical(widget.items, oldWidget.items) ||
+        !identical(widget.favoriteItems, oldWidget.favoriteItems)) {
+      final String query = _searchController.text;
+      if (query.isEmpty) {
+        _state = ACDSearchIdle<T>(_idleItems);
+      } else if (widget.onFind == null) {
+        _state = _filterLocal(query);
+      }
     }
   }
 
@@ -290,6 +351,8 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
 
   void _onQueryChanged() {
     final query = _searchController.text;
+    if (query == _lastQuery) return; // caret/selection-only change
+    _lastQuery = query;
     _debounce?.cancel();
     if (_paginating) {
       _debounce = Timer(
@@ -299,6 +362,8 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
       return;
     }
     if (query.isEmpty) {
+      // Supersede any in-flight onFind for the old query.
+      _searchGeneration++;
       setState(() => _state = ACDSearchIdle<T>(_idleItems));
       return;
     }
@@ -306,8 +371,10 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
   }
 
   void _maybeLoadMore() {
-    if (_loadingMore || !_hasMore) return;
-    final position = _paginationController!.position;
+    if (_loadingMore || !_hasMore || _loadMoreFailed) return;
+    final ScrollController? controller = _paginationController;
+    if (controller == null || !controller.hasClients) return;
+    final position = controller.position;
     if (position.pixels >= position.maxScrollExtent - 200) {
       _loadPage(query: _searchController.text, reset: false);
     }
@@ -317,6 +384,9 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
     if (reset) {
       _page = 0;
       _hasMore = true;
+      // A superseded load-more never reports back; don't leave it latched.
+      _loadingMore = false;
+      _loadMoreFailed = false;
     }
     if (!_hasMore) return;
     final int generation = reset ? ++_searchGeneration : _searchGeneration;
@@ -338,11 +408,20 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
             ? ACDSearchEmpty<T>(query)
             : ACDSearchLoaded<T>(merged);
       });
+      // A short page may not fill the viewport, so no scroll event would
+      // ever ask for the next one: check once it has laid out.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _maybeLoadMore();
+      });
     } catch (error, stackTrace) {
       if (!mounted || generation != _searchGeneration) return;
       setState(() {
         _loadingMore = false;
-        if (reset) _state = ACDSearchError<T>(error, query, stackTrace);
+        if (reset) {
+          _state = ACDSearchError<T>(error, query, stackTrace);
+        } else {
+          _loadMoreFailed = true;
+        }
       });
     }
   }
@@ -355,7 +434,9 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
     if (widget.onFind != null) {
       setState(() => _state = const ACDSearchLoading());
       try {
-        final results = await widget.onFind!(query);
+        final List<T>? cached = widget.cacheResults ? _cache[query] : null;
+        final List<T> results = cached ?? await widget.onFind!(query);
+        if (widget.cacheResults) _cache[query] = results;
         if (!mounted || generation != _searchGeneration) return;
         setState(
           () => _state = results.isEmpty
@@ -369,15 +450,17 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
       return;
     }
 
+    setState(() => _state = _filterLocal(query));
+  }
+
+  ACDSearchState<T> _filterLocal(String query) {
     final lowerQuery = query.toLowerCase();
     final filtered = widget.items
         .where((item) => _labelOf(item).toLowerCase().contains(lowerQuery))
         .toList();
-    setState(
-      () => _state = filtered.isEmpty
-          ? ACDSearchEmpty<T>(query)
-          : ACDSearchLoaded<T>(filtered),
-    );
+    return filtered.isEmpty
+        ? ACDSearchEmpty<T>(query)
+        : ACDSearchLoaded<T>(filtered);
   }
 
   bool _equals(T a, T b) => widget.compareFn?.call(a, b) ?? a == b;
@@ -403,10 +486,15 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
         final existing = _findInSelected(item);
         if (existing != null) {
           _selected.remove(existing);
-        } else {
+        } else if (!_atMaxSelection) {
           _selected.add(item);
         }
       });
+      // Without a Confirm button nothing else would ever commit the
+      // selection, so each toggle commits.
+      if (!widget.showConfirmCancelButtons) {
+        widget.onMultipleItemsChange?.call(_selected.toList());
+      }
       return;
     }
     setState(() => _selectedValue = item);
@@ -457,7 +545,9 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
         TextField(
           controller: _searchController,
           decoration: InputDecoration(
-            hintText: widget.searchHint ?? 'Search...',
+            hintText:
+                widget.searchHint ??
+                ACDDesignScope.stringsOf(context).searchHint,
             prefixIcon: Icon(widget.searchIcon),
             fillColor: widget.searchFillColor,
             filled: widget.searchFillColor != null,
@@ -491,10 +581,19 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
       ACDSearchLoaded<T> s => _buildList(context, s.items, design),
       ACDSearchEmpty<T> s =>
         widget.emptyBuilder?.call(context, s.query) ??
-            Center(child: Text('No results for "${s.query}"')),
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(ACDDesignScope.stringsOf(context).noResultsFor(s.query)),
+                  if (widget.onCreate != null && s.query.isNotEmpty)
+                    _buildCreateRow(context, s.query, design),
+                ],
+              ),
+            ),
       ACDSearchError<T> s =>
         widget.errorBuilder?.call(context, s.error) ??
-            const Center(child: Text('Something went wrong.')),
+            Center(child: Text(ACDDesignScope.stringsOf(context).errorMessage)),
     };
   }
 
@@ -510,15 +609,49 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
       fontWeight: widget.fontWeight,
       fontFamily: widget.fontFamily,
     ).merge(widget.style);
+    // Rows: an optional select-all row, then items (under group headers
+    // when groupBy is set).
+    final List<Object> entries = <Object>[
+      if (widget.multiple && widget.showSelectAll && items.isNotEmpty)
+        const _SelectAllEntry(),
+      ..._groupedEntries(items),
+    ];
     // The list always fills an Expanded slot, so it doesn't need to
     // shrink-wrap (which forces laying out every row up front).
     return ListView.builder(
       padding: EdgeInsets.zero,
       physics: widget.physics,
       controller: _paginating ? _paginationController : widget.controller,
-      itemCount: items.length + (showLoadMoreRow ? 1 : 0),
+      itemCount: entries.length + (showLoadMoreRow ? 1 : 0),
       itemBuilder: (context, index) {
-        if (index >= items.length) {
+        if (index >= entries.length) {
+          if (_loadMoreFailed) {
+            final ACDStrings strings = ACDDesignScope.stringsOf(context);
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Center(
+                child: ACDAdaptiveTappable(
+                  design: design,
+                  onTap: () {
+                    setState(() => _loadMoreFailed = false);
+                    _loadPage(query: _searchController.text, reset: false);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    child: Text(
+                      '${strings.errorMessage} ${strings.retry}',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }
           return widget.loadMoreBuilder?.call(context) ??
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -531,9 +664,18 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
                 ),
               );
         }
-        final item = items[index];
+        final Object entry = entries[index];
+        if (entry is _SelectAllEntry) {
+          return _buildSelectAllRow(context, items, design);
+        }
+        if (entry is _GroupHeaderEntry) {
+          return _buildGroupHeader(context, entry.title, design);
+        }
+        final T item = (entry as _ItemEntry<T>).item;
         final selected = _isSelected(item);
-        final disabled = widget.isDisabledItem?.call(item) ?? false;
+        final disabled =
+            (widget.isDisabledItem?.call(item) ?? false) ||
+            (!selected && _atMaxSelection);
         final onTap = disabled ? null : () => _handleTap(item);
         if (widget.itemBuilder != null) {
           return Semantics(
@@ -579,7 +721,7 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
             child: acdEnsureMaterial(
               context,
               Material(
-                color: widget.tileColor ?? Colors.white,
+                color: widget.tileColor ?? acdMaterialSurface(context),
                 child: ListTile(
                   onTap: onTap,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -608,6 +750,180 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
     );
   }
 
+  List<Object> _groupedEntries(List<T> items) {
+    final String Function(T item)? groupBy = widget.groupBy;
+    if (groupBy == null) {
+      return [for (final T item in items) _ItemEntry<T>(item)];
+    }
+    // Group in first-appearance order (a LinkedHashMap keeps insertion).
+    final Map<String, List<T>> groups = <String, List<T>>{};
+    for (final T item in items) {
+      groups.putIfAbsent(groupBy(item), () => <T>[]).add(item);
+    }
+    return [
+      for (final MapEntry<String, List<T>> g in groups.entries) ...[
+        _GroupHeaderEntry(g.key),
+        for (final T item in g.value) _ItemEntry<T>(item),
+      ],
+    ];
+  }
+
+  void _commitIfNoConfirm() {
+    if (!widget.showConfirmCancelButtons) {
+      widget.onMultipleItemsChange?.call(_selected.toList());
+    }
+  }
+
+  Widget _buildSelectAllRow(
+    BuildContext context,
+    List<T> items,
+    ACDResolvedDesign design,
+  ) {
+    final List<T> selectable = items
+        .where((T i) => !(widget.isDisabledItem?.call(i) ?? false))
+        .toList();
+    final bool all =
+        selectable.isNotEmpty && selectable.every((T i) => _isSelected(i));
+    void toggle() {
+      setState(() {
+        if (all) {
+          for (final T i in selectable) {
+            final T? existing = _findInSelected(i);
+            if (existing != null) _selected.remove(existing);
+          }
+        } else {
+          for (final T i in selectable) {
+            if (_atMaxSelection) break;
+            if (_findInSelected(i) == null) _selected.add(i);
+          }
+        }
+      });
+      _commitIfNoConfirm();
+    }
+
+    final String label = ACDDesignScope.stringsOf(context).selectAll;
+    if (design.isCupertino) {
+      return ACDAdaptiveListTile(
+        design: design,
+        enabled: true,
+        selected: all,
+        backgroundColor: widget.tileColor,
+        onTap: toggle,
+        leading: ACDAdaptiveCheckbox(
+          design: design,
+          value: all,
+          activeColor: widget.checkboxActiveColor,
+          onChanged: (_) => toggle(),
+        ),
+        title: Text(label),
+      );
+    }
+    return acdEnsureMaterial(
+      context,
+      Material(
+        color: widget.tileColor ?? acdMaterialSurface(context),
+        child: ListTile(
+          onTap: toggle,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16.0),
+          leading: Checkbox(
+            value: all,
+            activeColor: widget.checkboxActiveColor,
+            onChanged: (_) => toggle(),
+          ),
+          title: Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGroupHeader(
+    BuildContext context,
+    String title,
+    ACDResolvedDesign design,
+  ) {
+    final TextStyle style = design.isCupertino
+        ? TextStyle(
+            fontSize: 13,
+            color: ACDDesignTokens.of(context, design).onSurfaceVariant,
+          )
+        : (Theme.of(context).textTheme.labelLarge ?? const TextStyle())
+              .copyWith(color: Theme.of(context).colorScheme.primary);
+    return Semantics(
+      header: true,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+        child: Text(
+          design.isCupertino ? title.toUpperCase() : title,
+          style: style,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCreateRow(
+    BuildContext context,
+    String query,
+    ACDResolvedDesign design,
+  ) {
+    final String label = '${ACDDesignScope.stringsOf(context).create} "$query"';
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: ACDAdaptiveTappable(
+        design: design,
+        onTap: _creating ? null : () => _create(query),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_creating)
+                ACDAdaptiveProgress(design: design, size: 16, strokeWidth: 2)
+              else
+                Icon(Icons.add, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(color: Theme.of(context).colorScheme.primary),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _create(String query) async {
+    setState(() => _creating = true);
+    final T? created;
+    try {
+      created = await widget.onCreate!(query);
+    } catch (error, stackTrace) {
+      if (mounted) {
+        setState(() {
+          _creating = false;
+          _state = ACDSearchError<T>(error, query, stackTrace);
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _creating = false);
+    if (created == null) return;
+    _cache.clear(); // the new item may belong in earlier results
+    if (widget.multiple) {
+      setState(() {
+        if (!_atMaxSelection) _selected.add(created as T);
+        _state = ACDSearchLoaded<T>(<T>[created as T]);
+      });
+      _commitIfNoConfirm();
+    } else {
+      _handleTap(created);
+    }
+  }
+
   Widget _buildConfirmCancelRow(
     BuildContext context,
     ACDResolvedDesign design,
@@ -617,6 +933,8 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
       widget.dialogDismiss?.call();
     }
 
+    final ACDStrings strings = ACDDesignScope.stringsOf(context);
+
     if (design.isCupertino) {
       return Row(
         mainAxisAlignment: MainAxisAlignment.end,
@@ -624,7 +942,7 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
           CupertinoButton(
             onPressed: widget.dialogDismiss,
             child: Text(
-              widget.cancelText,
+              widget.cancelText ?? strings.cancel,
               style: widget.cancelColor == null
                   ? null
                   : TextStyle(color: widget.cancelColor),
@@ -633,7 +951,7 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
           CupertinoButton(
             onPressed: confirm,
             child: Text(
-              widget.confirmText,
+              widget.confirmText ?? strings.ok,
               style: TextStyle(
                 color: widget.confirmColor,
                 fontWeight: widget.confirmFontWeight ?? FontWeight.w600,
@@ -653,7 +971,7 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
             style: TextButton.styleFrom(
               foregroundColor: widget.cancelColor ?? Colors.grey,
             ),
-            child: Text(widget.cancelText),
+            child: Text(widget.cancelText ?? strings.cancel),
           ),
           TextButton(
             onPressed: confirm,
@@ -661,10 +979,27 @@ class _ACDSearchableListTileState<T> extends State<ACDSearchableListTile<T>> {
               foregroundColor: widget.confirmColor ?? Colors.teal,
               textStyle: TextStyle(fontWeight: widget.confirmFontWeight),
             ),
-            child: Text(widget.confirmText),
+            child: Text(widget.confirmText ?? strings.ok),
           ),
         ],
       ),
     );
   }
+}
+
+/// The select-all row in [ACDSearchableListTile]'s list.
+class _SelectAllEntry {
+  const _SelectAllEntry();
+}
+
+/// A section header row (from `groupBy`).
+class _GroupHeaderEntry {
+  const _GroupHeaderEntry(this.title);
+  final String title;
+}
+
+/// A data row. Wrapped so a `T` of `String` can't be mistaken for a header.
+class _ItemEntry<T> {
+  const _ItemEntry(this.item);
+  final T item;
 }

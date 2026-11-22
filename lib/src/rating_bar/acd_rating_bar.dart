@@ -78,13 +78,23 @@ class ACDRatingBar extends StatefulWidget {
     this.halfIcon,
     this.emptyIcon,
     this.design,
+    this.semanticLabel,
     this.starPoints = 5,
     this.starPointRounding = 0,
     this.starInnerRadiusRatio = 0.4,
     this.mouseCursor,
     this.animationDuration = const Duration(milliseconds: 200),
     this.animationCurve = Curves.easeOut,
-  }) : assert(itemCount > 0, 'itemCount must be positive');
+  }) : assert(itemCount > 0, 'itemCount must be positive'),
+       assert(
+         ratingPrecision == null || ratingPrecision > 0,
+         'ratingPrecision must be positive',
+       ),
+       assert(minRating >= 0, 'minRating must not be negative'),
+       assert(
+         maxRating == null || maxRating >= minRating,
+         'maxRating must be >= minRating',
+       );
 
   /// Controlled rating — when non-null, this widget is fully controlled
   /// (Checkbox-style): every rebuild's [rating] is authoritative and
@@ -210,6 +220,11 @@ class ACDRatingBar extends StatefulWidget {
   /// default star glyphs and colors (iOS: SF-style stars, system yellow).
   final ACDDesign? design;
 
+  /// What this control is for, read by screen readers before its value
+  /// (e.g. "Notifications", "Rate this app"). Without it, only the value
+  /// is announced.
+  final String? semanticLabel;
+
   /// Star point count, used only when [itemIconStyle] is
   /// [ACDRatingIconStyle.vectorStar].
   final int starPoints;
@@ -277,6 +292,32 @@ class _ACDRatingBarState extends State<ACDRatingBar>
   double get _resolvedMaxRating =>
       widget.maxRating ?? widget.itemCount.toDouble();
 
+  /// [ACDRatingBar.minRating], never above the resolved max — so a
+  /// misconfigured pair (or an `itemCount` lowered below `minRating`) can't
+  /// make `clamp` throw in release builds.
+  double get _resolvedMinRating =>
+      math.min(math.max(0.0, widget.minRating), _resolvedMaxRating);
+
+  double _clampRating(double value) => value.isNaN
+      ? _resolvedMinRating
+      : value.clamp(_resolvedMinRating, _resolvedMaxRating);
+
+  /// Removes binary floating-point noise (0.1 * 3 == 0.30000000000000004)
+  /// so committed values sit exactly on the step grid.
+  static double _clean(double v) => (v * 1e9).roundToDouble() / 1e9;
+
+  @override
+  void didUpdateWidget(covariant ACDRatingBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A lowered itemCount/maxRating must not leave the uncontrolled rating
+    // above the new ceiling (screen readers would read "7 of 5").
+    if (widget.rating == null) {
+      final double clamped = _clampRating(_internalRating);
+      // The display notifier is re-synced post-frame by _buildBar.
+      if (clamped != _internalRating) _internalRating = clamped;
+    }
+  }
+
   bool get _tapAllowed =>
       widget.interactionMode == ACDRatingInteractionMode.tapAndDrag ||
       widget.interactionMode == ACDRatingInteractionMode.tapOnly;
@@ -299,11 +340,12 @@ class _ACDRatingBarState extends State<ACDRatingBar>
       widget.textDirection ?? Directionality.of(context);
 
   double _quantize(double raw) {
-    final double step =
-        widget.ratingPrecision ?? (widget.allowHalfRating ? 0.5 : 1.0);
+    final double step = _step;
     final double clamped = raw.clamp(0.0, widget.itemCount.toDouble());
     if (clamped <= 0) return 0;
-    return (clamped / step).ceil() * step;
+    // The epsilon keeps an on-grid value (e.g. 0.3 / 0.1 = 3.0000000000000004)
+    // from ceiling up a whole extra step.
+    return _clean((clamped / step - 1e-9).ceil() * step);
   }
 
   /// Maps a pointer to a rating using each star's *actual* rect, so
@@ -350,11 +392,11 @@ class _ACDRatingBarState extends State<ACDRatingBar>
       if (offset >= 0) raw = i + (offset / extent).clamp(0.0, 1.0);
     }
     if (raw == null) return null;
-    return _quantize(raw).clamp(widget.minRating, _resolvedMaxRating);
+    return _clampRating(_quantize(raw));
   }
 
   void _commit(double value) {
-    final double clamped = value.clamp(widget.minRating, _resolvedMaxRating);
+    final double clamped = _clampRating(_clean(value));
     final double old = _committedRating;
     if (widget.rating == null) {
       setState(() => _internalRating = clamped);
@@ -442,11 +484,18 @@ class _ACDRatingBarState extends State<ACDRatingBar>
           ? ACDDesignTokens.of(context, _design).track
           : Theme.of(context).colorScheme.surfaceContainerHighest);
 
-  double get _step =>
-      widget.ratingPrecision ?? (widget.allowHalfRating ? 0.5 : 1.0);
+  double get _step {
+    final double? precision = widget.ratingPrecision;
+    if (precision != null && precision.isFinite && precision > 0) {
+      return precision;
+    }
+    return widget.allowHalfRating ? 0.5 : 1.0;
+  }
 
   void _nudge(int direction) {
-    _commit(_committedRating + direction * _step);
+    // Snap to the step grid first so repeated nudges never drift off it.
+    final double onGrid = (_committedRating / _step).roundToDouble() * _step;
+    _commit(onGrid + direction * _step);
   }
 
   // Arrow keys adjust the rating (reading-direction aware horizontally).
@@ -592,23 +641,23 @@ class _ACDRatingBarState extends State<ACDRatingBar>
     final Widget bar = _buildBar(context);
     final ACDStrings strings = ACDDesignScope.stringsOf(context);
     final double max = _resolvedMaxRating;
+    final double min = _resolvedMinRating;
     final int maxItems = widget.itemCount;
     String label(double r) => strings.ratingLabel(r, maxItems);
-    final double current = _committedRating;
+    final double current = _clampRating(_committedRating);
     // A slider-like control for screen readers: value + increase/decrease.
     return Semantics(
+      label: widget.semanticLabel,
       slider: _interactive,
       value: label(current),
       increasedValue: _interactive && current < max
-          ? label((current + _step).clamp(widget.minRating, max))
+          ? label(_clampRating(current + _step))
           : null,
-      decreasedValue: _interactive && current > widget.minRating
-          ? label((current - _step).clamp(widget.minRating, max))
+      decreasedValue: _interactive && current > min
+          ? label(_clampRating(current - _step))
           : null,
       onIncrease: _interactive && current < max ? () => _nudge(1) : null,
-      onDecrease: _interactive && current > widget.minRating
-          ? () => _nudge(-1)
-          : null,
+      onDecrease: _interactive && current > min ? () => _nudge(-1) : null,
       child: ExcludeSemantics(
         child: _interactive ? Focus(onKeyEvent: _onKey, child: bar) : bar,
       ),

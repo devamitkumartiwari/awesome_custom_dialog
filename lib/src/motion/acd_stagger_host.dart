@@ -45,7 +45,10 @@ mixin ACDStaggerHost<T extends StatefulWidget>
   Duration _totalFor(int count) {
     if (count == 0) return Duration.zero;
     final ACDStaggerOptions o = staggerOptions;
-    final int slots = math.min(count, o.maxStaggeredItems ?? count);
+    final int slots = math.max(
+      1,
+      math.min(count, o.maxStaggeredItems ?? count),
+    );
     return o.startDelay + o.interval * (slots - 1) + o.itemDuration;
   }
 

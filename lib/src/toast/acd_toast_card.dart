@@ -9,6 +9,7 @@ import '../design/internal/acd_adaptive_widgets.dart';
 import '../design/internal/acd_platform_support.dart';
 
 import '../core/acd_content_type.dart';
+import '../core/acd_gravity.dart';
 import 'acd_toast_close_button_mode.dart';
 import 'acd_toast_config.dart';
 import 'acd_toast_controller.dart';
@@ -177,16 +178,51 @@ class _ACDToastCardState extends State<ACDToastCard> {
                 : result),
     );
 
-    if (_config.dragToDismiss ?? false) {
-      result = Dismissible(
-        key: ValueKey('${widget.controller.id}-dismissible'),
-        direction: DismissDirection.horizontal,
-        onDismissed: (_) => widget.onDismissRequested(
-          immediate: true,
-          reason: ACDToastDismissReason.swipe,
-        ),
+    if (_config.pauseOnHover ?? false) {
+      // Touch has no hover: holding a finger on the toast pauses it too.
+      result = Listener(
+        onPointerDown: (PointerDownEvent e) {
+          if (e.kind != ui.PointerDeviceKind.mouse) widget.controller.pause();
+        },
+        onPointerUp: (PointerUpEvent e) {
+          if (e.kind != ui.PointerDeviceKind.mouse) widget.controller.resume();
+        },
+        onPointerCancel: (PointerCancelEvent e) {
+          if (e.kind != ui.PointerDeviceKind.mouse) widget.controller.resume();
+        },
         child: result,
       );
+    }
+
+    if (_config.dragToDismiss ?? false) {
+      void swiped(DismissDirection _) => widget.onDismissRequested(
+        immediate: true,
+        reason: ACDToastDismissReason.swipe,
+      );
+      result = Dismissible(
+        key: ObjectKey(widget.controller),
+        direction: DismissDirection.horizontal,
+        onDismissed: swiped,
+        child: result,
+      );
+      // Top/bottom toasts can also be flicked off their own edge.
+      final DismissDirection? vertical = switch (_config.gravity) {
+        ACDGravity.top ||
+        ACDGravity.leftTop ||
+        ACDGravity.rightTop => DismissDirection.up,
+        ACDGravity.bottom ||
+        ACDGravity.leftBottom ||
+        ACDGravity.rightBottom => DismissDirection.down,
+        _ => null,
+      };
+      if (vertical != null) {
+        result = Dismissible(
+          key: ValueKey<Object>((widget.controller, 'vertical')),
+          direction: vertical,
+          onDismissed: swiped,
+          child: result,
+        );
+      }
     }
 
     // One announcement: the label carries the message and only the visible
@@ -198,6 +234,18 @@ class _ACDToastCardState extends State<ACDToastCard> {
       label: _config.message,
       child: result,
     );
+  }
+
+  @override
+  void didUpdateWidget(covariant ACDToastCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A live update (e.g. a promise toast settling) is news: announce it.
+    if (oldWidget.config.message != widget.config.message &&
+        widget.config.customBuilder == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) acdAnnounce(context, widget.config.message);
+      });
+    }
   }
 
   @override
@@ -240,7 +288,16 @@ class _ACDToastCardState extends State<ACDToastCard> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        if (showIcon) ...[
+        if (_config.showLoadingIndicator ?? false) ...[
+          ACDAdaptiveProgress(
+            design: ACDDesign.resolve(context, _config.design),
+            size: 18,
+            strokeWidth: 2,
+            color: textColor,
+            semanticsLabel: ACDDesignScope.stringsOf(context).loading,
+          ),
+          const SizedBox(width: 8),
+        ] else if (showIcon) ...[
           (_config.animatedIcon ?? false)
               ? _ACDPulsingIcon(icon: resolvedIcon, color: textColor)
               : Icon(resolvedIcon, color: textColor, size: 20),

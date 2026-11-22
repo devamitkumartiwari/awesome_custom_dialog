@@ -4,11 +4,15 @@ Everything the [README](../README.md) leaves out: every option for every widget,
 API list. Start with the README if you are new to the package.
 
 - [Dialog options](#dialog-options)
+- [Bottom sheet](#bottom-sheet)
+- [Loading dialog](#loading-dialog)
 - [Searchable list](#searchable-list)
 - [Toast](#toast)
+- [Promise & undo toasts](#promise--undo-toasts)
 - [Snackbar](#snackbar)
 - [Dropdown](#dropdown)
 - [Autocomplete](#autocomplete)
+- [Form-field wrappers](#form-field-wrappers)
 - [PIN / OTP](#pin--otp)
 - [Slide to confirm](#slide-to-confirm)
 - [Switch](#switch)
@@ -65,6 +69,39 @@ ACDDialog().build(context)
 `listOfACDListTile()`, `listOfACDRadioButton()` and `listOfACDCheckbox()` each take a `stagger`
 parameter for their rows.
 
+## Bottom sheet
+
+`ACDDialog.bottomSheet(context: context)` returns a normal `ACDDialog`. Add content with the
+usual builder methods, then `show()` or `showForResult<T>()`.
+
+- `showDragHandle` (default `true`) shows the grab handle.
+- `dragToDismiss` (default `true`): drag down or flick to close. It's off while `canPop` is
+  `false`.
+- `maxHeightFraction` (default `0.9`): taller content scrolls.
+- `backgroundColor` overrides the theme surface.
+- **Layout:**
+  - the sheet is flush with the screen edges unless you set `margin`;
+  - its content stays clear of the home indicator and the keyboard;
+  - corners are 28 dp on Material and 12 pt on Cupertino.
+
+## Loading dialog
+
+```dart
+final result = await ACDDialog.loading(
+  context: context,
+  future: work(),
+  message: 'Working…',
+  showAfter: const Duration(milliseconds: 300), // skip the dialog for fast work
+  minDisplay: const Duration(milliseconds: 500), // no flicker once shown
+  cancelable: true,
+);
+```
+
+- It returns the future's value, or rethrows its error.
+- The barrier and back button can't close it.
+- With `cancelable: true`, tapping Cancel makes the call throw `ACDLoadingCanceled`. The work
+  itself keeps running.
+
 ## Searchable list
 
 - Pass your own model type instead of `String`. `itemAsString` gives the label, and
@@ -73,6 +110,15 @@ parameter for their rows.
 - `onFind` sends non-empty searches to your own async or server search instead of filtering
   `items` locally. Loading, empty and error states are shown for you.
 - `searchIcon` replaces the magnifying-glass icon. `borderRadius` rounds the rows.
+- **Long lists:**
+  - `groupBy` shows section headers;
+  - `showSelectAll` adds a "Select all" row (multi-select);
+  - `maxSelection` caps how many items can be picked;
+  - `cacheResults` caches `onFind` results per query;
+  - `onCreate` adds a "Create "query"" row when nothing matches. Return the new item to
+    select it.
+- `onFindPaged(query, page)` loads page by page. It keeps loading until the list fills the
+  screen, and shows a retry row if a page fails.
 
 `searchableList()` only works inside an open dialog. For a field inside a form, use
 [Dropdown](#dropdown).
@@ -142,6 +188,51 @@ MaterialApp(
 `dismissFirst()`, `dismissLast()`, `findById(id)`, `activeCount()`, `activeToasts()`, and
 `setDefaults(ACDToastConfig(...))` for app-wide defaults.
 
+## Promise & undo toasts
+
+```dart
+await ACDDialog.promiseToast<Note>(
+  context: context,
+  future: repo.save(note),
+  loading: 'Saving…',
+  success: (saved) => 'Saved "${saved.title}"',
+  error: (e) => 'Could not save',
+  resultDuration: const Duration(seconds: 3),
+);
+
+final undone = await ACDDialog.undoToast(
+  context: context,
+  message: 'Message deleted',
+  duration: const Duration(seconds: 5),
+  onUndo: restoreLocally,
+);
+```
+
+**Change a toast while it's showing** with its controller:
+
+```dart
+final controller = ACDToastManager.show(
+  context,
+  const ACDToastConfig(message: 'Uploading…', showLoadingIndicator: true),
+);
+controller.update(
+  message: 'Uploaded',
+  contentType: ACDContentType.success,
+  showLoadingIndicator: false,
+);
+```
+
+`update()` restarts the timer, and screen readers hear the new message.
+
+**Gestures:**
+- With `dragToDismiss`, toasts swipe away sideways, and top/bottom toasts also swipe off their
+  own edge.
+- `pauseOnHover` also pauses while a finger is held on the toast.
+- Snackbars swipe away sideways.
+
+**Screen readers:** while TalkBack/VoiceOver is on, toasts that have `actions` stay up until
+dismissed.
+
 ## Snackbar
 
 Inside Flutter's own `SnackBar`:
@@ -176,6 +267,10 @@ Styling: `gradient`, `elevation` / `boxShadow`, `icon`, `titleFontSize` / `title
 **How it opens** (`mode:`): `dialog` (default), `bottomSheet`, `menu` (under the field, flips
 above when there's no room), `actionSheet`, `picker`, or `adaptive` (on iOS an action sheet for
 short lists and a picker for long ones; on Material a dialog).
+
+**Long lists:** `groupBy`, `cacheResults` and `onCreate` work as in the
+[searchable list](#searchable-list). The multi-select field also takes `showSelectAll` and
+`maxSelection`.
 
 **Multi-select** with `ACDMultiDropdownField<T>`. The value is a `List<T>`, confirmed with OK.
 Selections show as removable chips and collapse to "+N" after `maxVisibleChips` (default 3).
@@ -284,6 +379,19 @@ ACDTriggerAutocompleteField(
 )
 ```
 
+## Form-field wrappers
+
+`ACDSwitchFormField`, `ACDRatingFormField` and `ACDAutocompleteFormField<T>` put a switch, a
+rating bar or an autocomplete in a `Form`. They support `validator`, `onSaved`,
+`autovalidateMode`, `enabled` and `reset()`, and show an error line under the field.
+
+- `ACDSwitchFormField(title: Text('I accept the terms'), validator: …)` puts the title beside
+  the switch.
+- `ACDRatingFormField(itemCount: 5, allowHalfRating: true, validator: …)`.
+- The value of `ACDAutocompleteFormField<T>` is the picked suggestion. Typing after a pick
+  clears it, so `validator: (v) => v == null ? 'Pick one' : null` requires a real choice.
+  `reset()` restores `initialValue` in the text too.
+
 ## PIN / OTP
 
 `ACDPinField` is built on one real, invisible `TextField`, so cursor, paste, keyboard and
@@ -304,6 +412,15 @@ autofill are Flutter's own. It is a `FormField<String>`: `validator`, `onSaved` 
 - `padding` / `margin` around the whole field.
 - Digits are entered left to right even in RTL apps (the usual PIN layout). Pass
   `textDirection: TextDirection.rtl` to mirror it.
+- **`ACDPinController`:** a `TextEditingController` with PIN helpers:
+  - `clear()` wipes the digits;
+  - `setCode('123456')` fills the field and trims to its length;
+  - `focus()` / `unfocus()` work without a `FocusNode`;
+  - `isComplete` tells you whether every cell is filled.
+- **`ACDResendCountdown(onResend: …, duration: …)`** is the "Resend code (0:28)" button. It
+  shows a spinner while sending, restarts after a send, and announces when it's available.
+- **Pasting** a code like `123-456` or `123 456` works; `onClipboardFound` gets the digits
+  only.
 
 ## Slide to confirm
 
@@ -516,7 +633,11 @@ Widget-specific options are in each section above.
 | `.acdDivider()` | Divider line. |
 | `.listOfACDListTile()` / `.listOfACDRadioButton()` / `.listOfACDCheckbox()` | List content. |
 | `.searchableList<T>()` / `.multiSearchableList<T>()` | Filterable single / multi-select list. |
+| `ACDDialog.bottomSheet()` | Modal bottom sheet built like a dialog. |
+| `ACDDialog.loading()` | Progress dialog around a `Future`. |
+| `.showAndWait()` | Show and wait until the dialog is gone. |
 | `ACDDialog.toast()` / `ACDDialog.cancelToast()` | Show / close a toast. |
+| `ACDDialog.promiseToast()` / `ACDDialog.undoToast()` | Loading → result toast / Undo toast. |
 | `ACDToastLayer` | Optional own layer for toasts. |
 | `ACDToastManager` | Manage all toasts and set defaults. |
 | `ACDDialog.snackbar()` / `ACDSnackbarContent` | Snackbar message. |
@@ -524,7 +645,8 @@ Widget-specific options are in each section above.
 | `ACDDropdownField<T>` / `ACDMultiDropdownField<T>` | Searchable dropdown form field. |
 | `ACDAutocompleteField<T>` | Typeahead text field. |
 | `ACDTriggerAutocompleteField` / `ACDAutocompleteTrigger` | `@mention` / `#hashtag` field. |
-| `ACDPinField` | PIN / OTP field. |
+| `ACDPinField` / `ACDPinController` / `ACDResendCountdown` | PIN / OTP field and helpers. |
+| `ACDSwitchFormField` / `ACDRatingFormField` / `ACDAutocompleteFormField<T>` | Form-field wrappers. |
 | `ACDSlideAction` / `.swipeButton()` / `ACDSlideActionController` | Slide to confirm. |
 | `ACDSwitch` / `.material()` / `.ios()` | Switch. |
 | `ACDRatingBar` | Rating bar. |

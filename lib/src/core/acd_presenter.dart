@@ -137,7 +137,13 @@ class ACD {
                   behavior: HitTestBehavior.opaque,
                   onTap: () {
                     _onBarrierTap();
-                    close();
+                    // maybePop (not pop) so a PopScope veto — canPop: false
+                    // / onPopInvoked — is respected, like a system back.
+                    if (route.isCurrent) {
+                      route.navigator?.maybePop();
+                    } else {
+                      close();
+                    }
                   },
                   child: const SizedBox.expand(),
                 ),
@@ -177,7 +183,7 @@ class ACD {
   ) {
     // Custom animation wins
     if (_animatedFunc != null) {
-      return _animatedFunc(child, animation);
+      return _animatedFunc(child, animation) as Widget;
     }
 
     // Reduce motion: no movement — a plain cross-fade.

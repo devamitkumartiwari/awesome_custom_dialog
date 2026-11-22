@@ -369,7 +369,7 @@ class _ACDDialogButton extends StatelessWidget {
       fontFamily: fontFamily,
       // Material keeps its original black default; iOS actions default to
       // the accent (system blue), like CupertinoDialogAction.
-      color: color ?? tokens?.primary ?? Colors.black,
+      color: color ?? tokens?.primary ?? acdMaterialOnSurface(context),
     ).merge(textStyle);
 
     final Widget label = icon == null
@@ -408,7 +408,7 @@ class _ACDDialogButton extends StatelessWidget {
         TextButton(
           onPressed: onPressed,
           style: TextButton.styleFrom(
-            foregroundColor: color ?? Colors.black,
+            foregroundColor: color ?? acdMaterialOnSurface(context),
             backgroundColor: gradient == null
                 ? backgroundColor
                 : Colors.transparent,

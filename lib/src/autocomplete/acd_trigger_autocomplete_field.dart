@@ -9,6 +9,7 @@ import '../design/acd_design.dart';
 import '../design/acd_design_scope.dart';
 import '../design/internal/acd_adaptive_widgets.dart';
 import '../list_tile/acd_search_state.dart';
+import '../design/internal/acd_platform_support.dart';
 
 // Word boundaries that end a trigger query (space, newline, tab).
 bool _isBoundary(String char) => char == ' ' || char == '\n' || char == '\t';
@@ -283,7 +284,6 @@ class _ACDTriggerAutocompleteFieldState
   void _onTextChanged() {
     final String text = _controller.text;
     final int cursor = _controller.selection.baseOffset;
-    _debounce?.cancel();
 
     if (cursor < 0) {
       _closeArmed();
@@ -305,8 +305,11 @@ class _ACDTriggerAutocompleteFieldState
       return;
     }
     if (_lastSearch == (armed.startIndex, query) && _portal.isShowing) {
-      return; // caret-only change within the same active query
+      return; // caret-only change: keep the pending search alive
     }
+    // Only a real query change supersedes the pending/in-flight search.
+    _debounce?.cancel();
+    _requestId++;
     _lastSearch = (armed.startIndex, query);
 
     setState(() => _armed = armed);
@@ -326,6 +329,8 @@ class _ACDTriggerAutocompleteFieldState
   }
 
   void _closeArmed() {
+    _debounce?.cancel();
+    _requestId++; // drop any in-flight result for the closed query
     _lastSearch = null;
     if (_armed != null) setState(() => _armed = null);
     _removeOverlay();
@@ -565,7 +570,13 @@ class _ACDTriggerAutocompleteFieldState
             );
       case ACDSearchError<Object?>(:final error):
         return widget.errorBuilder?.call(context, error) ??
-            Padding(padding: const EdgeInsets.all(16), child: Text('$error'));
+            Padding(
+              padding: const EdgeInsets.all(16),
+              // A generic, localizable message by default: the raw
+              // exception text is for logs, not users (errorBuilder
+              // still receives the error).
+              child: Text(ACDDesignScope.stringsOf(context).errorMessage),
+            );
       case ACDSearchEmpty<Object?>(:final query):
         return widget.emptyBuilder?.call(context, query) ??
             Padding(
@@ -586,7 +597,8 @@ class _ACDTriggerAutocompleteFieldState
               ),
             );
         final Color? tileColor =
-            widget.tileColor ?? (design.isCupertino ? null : Colors.white);
+            widget.tileColor ??
+            (design.isCupertino ? null : acdMaterialSurface(context));
         return ListView.builder(
           shrinkWrap: true,
           padding: EdgeInsets.zero,

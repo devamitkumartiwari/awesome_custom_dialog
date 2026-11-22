@@ -287,6 +287,8 @@ class _ACDCircularPercentIndicatorState
   @override
   void didUpdateWidget(covariant ACDCircularPercentIndicator oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // AutomaticKeepAliveClientMixin only re-reads wantKeepAlive here.
+    if (oldWidget.keepAlive != widget.keepAlive) updateKeepAlive();
     if (oldWidget.controller != widget.controller) {
       oldWidget.controller?.removeListener(_onControllerChanged);
       widget.controller?.addListener(_onControllerChanged);

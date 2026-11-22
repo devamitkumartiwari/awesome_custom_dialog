@@ -298,6 +298,7 @@ class _ACDAutocompleteFieldState<T> extends State<ACDAutocompleteField<T>> {
     _debounce?.cancel();
 
     if (query.length < widget.minCharsForSuggestions) {
+      _requestId++; // a late result for the old query must not land now
       setState(() => _state = ACDSearchIdle<T>(widget.suggestions));
       _removeOverlay();
       return;
@@ -446,7 +447,13 @@ class _ACDAutocompleteFieldState<T> extends State<ACDAutocompleteField<T>> {
             );
       case ACDSearchError<T>(:final error):
         return widget.errorBuilder?.call(context, error) ??
-            Padding(padding: const EdgeInsets.all(16), child: Text('$error'));
+            Padding(
+              padding: const EdgeInsets.all(16),
+              // A generic, localizable message by default: the raw
+              // exception text is for logs, not users (errorBuilder
+              // still receives the error).
+              child: Text(ACDDesignScope.stringsOf(context).errorMessage),
+            );
       case ACDSearchEmpty<T>(:final query):
         return widget.emptyBuilder?.call(context, query) ??
             Padding(
@@ -468,7 +475,8 @@ class _ACDAutocompleteFieldState<T> extends State<ACDAutocompleteField<T>> {
               ),
             );
         final Color? tileColor =
-            widget.tileColor ?? (design.isCupertino ? null : Colors.white);
+            widget.tileColor ??
+            (design.isCupertino ? null : acdMaterialSurface(context));
         final String query = _controller.text;
         return ListView.builder(
           shrinkWrap: true,
