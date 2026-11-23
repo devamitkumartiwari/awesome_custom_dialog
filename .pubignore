@@ -17,3 +17,21 @@ pubspec.lock
 # Internal notes and the unused SPM scaffold (this package has no native code).
 ANALYSIS.md
 /ios/
+# Developer scripts for regenerating the example's icons and the README GIFs
+# (and their preview image) — not needed by anyone using the package.
+example/tool/
+# Package tests (they run in this repo; apps using the package never need them).
+/test/
+# The example app's launcher-icon images (artwork only; the example's code and
+# platform projects are still published).
+example/android/app/src/main/res/mipmap-*/
+example/ios/Runner/Assets.xcassets/AppIcon.appiconset/*.png
+example/macos/Runner/Assets.xcassets/AppIcon.appiconset/*.png
+# The example's own tests and the README GIF capture tests.
+example/test/
+example/integration_test/
+# The example's platform projects. pub.dev's Example tab only needs
+# example/lib and example/pubspec.yaml; to run the example, clone the repo.
+example/android/
+example/ios/
+example/macos/
